@@ -323,31 +323,65 @@ class SokobanSolver:
             pygame.quit()
 
 
-def load_level_config(config_file: str):
+def load_all_levels(config_file: str) -> list[tuple]:
     with open(config_file, 'r') as f:
-        lines = [line.strip() for line in f.readlines() if line.strip()]
+        content = f.read().strip()
     
-    board = []
-    i = 0
-    while i < len(lines) and all(c in '012' for c in lines[i]):
-        board.append(lines[i])
-        i += 1
+    levels = []
+    level_blocks = content.split('[LEVEL]')
     
-    player_pos = tuple(map(int, lines[i].split(',')))
-    boxes_pos = [tuple(map(int, pos.split(','))) for pos in lines[i + 1].split(';')]
+    for block in level_blocks:
+        lines = [line.strip() for line in block.strip().split('\n') if line.strip()]
+        if not lines:
+            continue
+        
+        board = []
+        i = 0
+        while i < len(lines) and all(c in '012' for c in lines[i]):
+            board.append(lines[i])
+            i += 1
+        
+        if i < len(lines):
+            player_pos = tuple(map(int, lines[i].split(',')))
+            boxes_pos = [tuple(map(int, pos.split(','))) for pos in lines[i + 1].split(';')]
+            levels.append((board, player_pos, boxes_pos))
     
-    return board, player_pos, boxes_pos
+    return levels
+
+
+def load_level_config(config_file: str):
+    levels = load_all_levels(config_file)
+    return levels[0] if levels else ([], (0, 0), [])
 
 
 if __name__ == '__main__':
-    board, player_pos, boxes_pos = load_level_config('level.txt')
+    levels = load_all_levels('level/level.txt')
+    current_level = 0
     
-    solver = SokobanSolver(board, player_pos, boxes_pos)
-    solution = solver.solve()
-    
-    if solution:
-        print(f"Solution found in {solver.time_used:.3f}s: {solution}")
-        solver.visualize_pygame(solution, animation_speed=0.2)
-    else:
-        print("No solution found.")
-
+    while current_level < len(levels):
+        board, player_pos, boxes_pos = levels[current_level]
+        print(f"\n{'='*50}")
+        print(f"Level {current_level + 1} / {len(levels)}")
+        print(f"{'='*50}")
+        
+        solver = SokobanSolver(board, player_pos, boxes_pos)
+        solution = solver.solve()
+        
+        if solution:
+            print(f"Solution found in {solver.time_used:.3f}s")
+            print(f"Moves: {solution}")
+            print(f"Expanded nodes: {solver.expanded_nodes_count}")
+            print(f"Visited nodes: {solver.visited_nodes_count}")
+            
+            solver.visualize_pygame(solution, animation_speed=0.2)
+            current_level += 1
+            
+            if current_level < len(levels):
+                print(f"\nProceeding to Level {current_level + 1}...")
+            else:
+                print("\nAll levels completed!")
+        else:
+            print("No solution found for this level.")
+            retry = input("Retry this level? (y/n): ").strip().lower()
+            if retry != 'y':
+                break
