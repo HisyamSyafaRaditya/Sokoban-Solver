@@ -335,20 +335,19 @@ def load_level_config(config_file: str):
     
     player_pos = tuple(map(int, lines[i].split(',')))
     boxes_pos = [tuple(map(int, pos.split(','))) for pos in lines[i + 1].split(';')]
-    animation_speed = float(lines[i + 2]) if len(lines) > i + 2 else 0.2
     
-    return board, player_pos, boxes_pos, animation_speed
+    return board, player_pos, boxes_pos
 
 
 if __name__ == '__main__':
-    board, player_pos, boxes_pos, animation_speed = load_level_config('level.txt')
+    board, player_pos, boxes_pos = load_level_config('level.txt')
     
     solver = SokobanSolver(board, player_pos, boxes_pos)
     solution = solver.solve()
     
     if solution:
         print(f"Solution found in {solver.time_used:.3f}s: {solution}")
-        solver.visualize_pygame(solution, animation_speed=animation_speed)
+        solver.visualize_pygame(solution, animation_speed=0.2)
     else:
         print("No solution found.")
 
