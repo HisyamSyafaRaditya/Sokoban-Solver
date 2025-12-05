@@ -575,6 +575,7 @@ def load_level_config(config_file: str):
 # ============================================================================
 
 if __name__ == '__main__':
+    print("Loading levels...")
     levels = load_all_levels('level/level.txt')
     current_level = 0
     
