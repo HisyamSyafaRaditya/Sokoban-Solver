@@ -1,7 +1,3 @@
-"""
-Sokoban Solver using A* Search Algorithm with Dead Space Detection
-"""
-
 import time
 import pygame
 import os
@@ -35,19 +31,9 @@ EMPTY = '0'
 
 
 class SokobanSolver:
-    """
-    Solves Sokoban puzzles using A* search algorithm with dead space detection.
-    """
 
     def __init__(self, board: list[str], player_pos: tuple, boxes_pos: list[tuple]):
-        """
-        Initialize the Sokoban solver.
-        
-        Args:
-            board: 2D grid representing the game board
-            player_pos: Initial position of the player (row, col)
-            boxes_pos: List of initial box positions [(row, col), ...]
-        """
+        # Initialize the Sokoban solver.
         self.board = board
         self.init_player_pos = player_pos
         self.init_boxes_pos = boxes_pos
@@ -78,21 +64,12 @@ class SokobanSolver:
         self.visited_nodes_count = 0
         self.time_used = 0
 
-    # ========================================================================
-    # Dead Space Detection Methods
-    # ========================================================================
+# ============================================================================
+# Dead Space Detection Methods
+# ============================================================================
 
     def _is_corner(self, row: int, col: int) -> bool:
-        """
-        Check if a position is a corner (two adjacent walls).
-        
-        Args:
-            row: Row position
-            col: Column position
-            
-        Returns:
-            True if position is a corner, False otherwise
-        """
+        # Check if a position is a corner (two adjacent walls).
         corners = [
             (self.board[row - 1][col] == WALL and self.board[row][col - 1] == WALL),  # Top-left
             (self.board[row - 1][col] == WALL and self.board[row][col + 1] == WALL),  # Top-right
@@ -102,13 +79,7 @@ class SokobanSolver:
         return any(corners)
 
     def _generate_dead_space_matrix(self) -> list[list[bool]]:
-        """
-        Generate a matrix marking dead spaces where boxes cannot be pushed to goals.
-        Dead spaces include corners and walls adjacent to corners.
-        
-        Returns:
-            2D boolean matrix where True indicates a dead space
-        """
+        # Generate a matrix marking dead spaces where boxes cannot be pushed to goals.
         dead_space = [[False for _ in range(self.width)] for _ in range(self.height)]
 
         # Mark walls and corners as dead spaces
@@ -120,7 +91,7 @@ class SokobanSolver:
         return dead_space
 
     def _mark_walls_and_corners(self, dead_space: list[list[bool]]) -> None:
-        """Mark walls and corners as dead spaces."""
+        # Mark walls and corners as dead spaces.
         for row in range(self.height):
             for col in range(self.width):
                 if dead_space[row][col]:
@@ -134,7 +105,7 @@ class SokobanSolver:
                     dead_space[row][col] = True
 
     def _mark_dead_zones(self, dead_space: list[list[bool]]) -> None:
-        """Mark horizontal and vertical dead zones between corners."""
+        # Mark horizontal and vertical dead zones between corners.
         for row in range(self.height):
             for col in range(self.width):
                 if not self._should_check_dead_zone(row, col, dead_space):
@@ -149,7 +120,7 @@ class SokobanSolver:
                     self._mark_vertical_dead_zone(row, col, dead_space)
 
     def _should_check_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> bool:
-        """Check if a position should be evaluated for dead zones."""
+        # Check if a position should be evaluated for dead zones.
         if self.board[row][col] == WALL or self.board[row][col] == GOAL:
             return False
         if dead_space[row][col]:
@@ -157,8 +128,8 @@ class SokobanSolver:
         return self._is_valid_position(row, col)
 
     def _mark_horizontal_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> None:
-        """Mark horizontal dead zone if conditions are met."""
-        # Find left boundary
+        # Mark horizontal dead zone if conditions are met.
+        # left 
         left_col = col
         while (left_col > 0 and 
                self.board[row][left_col - 1] != WALL and
@@ -169,7 +140,7 @@ class SokobanSolver:
         if not self._is_corner(row, left_col) or not dead_space[row][left_col]:
             return
 
-        # Find right boundary
+        # right 
         right_col = col
         while (right_col < self.width - 1 and 
                self.board[row][right_col + 1] != WALL and
@@ -185,8 +156,8 @@ class SokobanSolver:
             dead_space[row][current_col] = True
 
     def _mark_vertical_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> None:
-        """Mark vertical dead zone if conditions are met."""
-        # Find top boundary
+        # Mark vertical dead zone if conditions are met.
+        # top 
         top_row = row
         while (top_row > 0 and 
                self.board[top_row - 1][col] != WALL and
@@ -197,7 +168,7 @@ class SokobanSolver:
         if not self._is_corner(top_row, col) or not dead_space[top_row][col]:
             return
 
-        # Find bottom boundary
+        # bottom 
         bottom_row = row
         while (bottom_row < self.height - 1 and 
                self.board[bottom_row + 1][col] != WALL and
@@ -213,35 +184,21 @@ class SokobanSolver:
             dead_space[current_row][col] = True
 
     def _is_valid_position(self, row: int, col: int) -> bool:
-        """Check if position is within valid bounds (not on edges)."""
+        # Check if position is within valid bounds (not on edges).
         return 0 < row < self.height - 1 and 0 < col < self.width - 1
 
-    # ========================================================================
-    # Heuristic and Distance Calculation Methods
-    # ========================================================================
-
+# ============================================================================
+# Heuristic and Distance Calculation Methods
+# ============================================================================
     def _precompute_distance_maps(self) -> dict:
-        """
-        Precompute minimum distances from each goal to all positions.
-        
-        Returns:
-            Dictionary mapping goal positions to distance matrices
-        """
+        # Precompute minimum distances from each goal to all positions.
         distance_map = {}
         for goal_pos in self.goals_pos:
             distance_map[goal_pos] = self._compute_minimum_distances(goal_pos)
         return distance_map
 
     def _compute_minimum_distances(self, start_pos: tuple[int, int]) -> list[list[int]]:
-        """
-        Compute minimum distances from start position to all reachable positions using BFS.
-        
-        Args:
-            start_pos: Starting position (row, col)
-            
-        Returns:
-            2D matrix of minimum distances
-        """
+        # Compute minimum distances from start position to all reachable positions using BFS.
         visited = [[False] * self.width for _ in range(self.height)]
         distances = [[INFINITY] * self.width for _ in range(self.height)]
         distances[start_pos[0]][start_pos[1]] = 0
@@ -270,19 +227,11 @@ class SokobanSolver:
         return distances
 
     def _is_position_in_bounds(self, row: int, col: int) -> bool:
-        """Check if position is within board bounds."""
+        # Check if position is within board bounds.
         return 0 <= row < self.height and 0 <= col < self.width
 
     def _calculate_heuristic(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> int:
-        """
-        Calculate heuristic value for a state (sum of minimum distances from boxes to goals).
-        
-        Args:
-            state: Tuple of (player_pos, boxes_positions)
-            
-        Returns:
-            Heuristic value
-        """
+        # Calculate heuristic value for a state (sum of minimum distances from boxes to goals).
         _, boxes = state
         total_distance = 0
         
@@ -296,29 +245,16 @@ class SokobanSolver:
         return total_distance
 
     # ========================================================================
-    # Search Algorithm Methods
+    # Search Algorithm 
     # ========================================================================
 
     def _is_goal_state(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> bool:
-        """
-        Check if all boxes are on goal positions.
-        
-        Args:
-            state: Tuple of (player_pos, boxes_positions)
-            
-        Returns:
-            True if goal state, False otherwise
-        """
+        # Check if all boxes are on goal positions.
         _, boxes = state
         return all(self.board[box[0]][box[1]] == GOAL for box in boxes)
 
     def _insert_into_fringe(self, node: tuple) -> None:
-        """
-        Insert a node into the fringe (priority queue) sorted by f-value.
-        
-        Args:
-            node: Tuple of (player_pos, boxes_pos, g_cost, h_cost, path)
-        """
+        # Insert a node into the fringe (priority queue) sorted by f-value.
         player_pos, boxes_pos, g_cost, h_cost, path = node
         state = (player_pos, tuple(sorted(boxes_pos)))
         
@@ -339,12 +275,7 @@ class SokobanSolver:
         self.fringe.append((player_pos, state[1], g_cost, h_cost, path))
 
     def solve(self) -> str:
-        """
-        Solve the Sokoban puzzle using A* search.
-        
-        Returns:
-            Solution path as string of moves (e.g., "RRDLLU") or None if no solution
-        """
+        # Solve the Sokoban puzzle using A* search.
         start_time = time.time()
         
         # Initialize with starting state
@@ -380,12 +311,7 @@ class SokobanSolver:
         return None
 
     def _explore_moves(self, node: tuple) -> None:
-        """
-        Explore all possible moves from current node.
-        
-        Args:
-            node: Current node (player_pos, boxes_pos, g_cost, h_cost, path)
-        """
+        # Explore all possible moves from current node.
         player_pos, boxes_pos, g_cost, h_cost, path = node
         
         for direction, (delta_row, delta_col) in DIRECTIONS.items():
@@ -408,7 +334,7 @@ class SokobanSolver:
             self._insert_into_fringe(new_node)
 
     def _is_move_valid(self, position: tuple[int, int]) -> bool:
-        """Check if a move to the given position is valid."""
+        # Check if a move to the given position is valid.
         row, col = position
         
         if not self._is_position_in_bounds(row, col):
@@ -420,18 +346,7 @@ class SokobanSolver:
 
     def _try_push_box(self, box_pos: tuple[int, int], delta_row: int, delta_col: int, 
                       boxes_list: list[tuple[int, int]]) -> bool:
-        """
-        Try to push a box in the given direction.
-        
-        Args:
-            box_pos: Current box position
-            delta_row: Row direction
-            delta_col: Column direction
-            boxes_list: List of box positions (modified in place)
-            
-        Returns:
-            True if push is valid, False otherwise
-        """
+        # Try to push a box in the given direction.
         new_box_pos = (box_pos[0] + delta_row, box_pos[1] + delta_col)
         
         # Check if new box position is valid
@@ -453,15 +368,7 @@ class SokobanSolver:
     # ========================================================================
 
     def _load_assets(self, tile_size: int) -> dict:
-        """
-        Load game assets (images) from the images directory.
-        
-        Args:
-            tile_size: Size of each tile in pixels
-            
-        Returns:
-            Dictionary of loaded assets
-        """
+        """Load game assets (images) from the images directory."""
         assets = {}
         base_dir = os.path.join(os.path.dirname(__file__), 'images')
         
@@ -488,14 +395,7 @@ class SokobanSolver:
 
     def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
                     boxes_pos: list[tuple[int, int]]) -> None:
-        """
-        Draw the game board with current state.
-        
-        Args:
-            screen: Pygame surface to draw on
-            player_pos: Current player position
-            boxes_pos: Current box positions
-        """
+        # Draw the game board with current state.
         screen.fill(BLACK)
 
         # Draw board tiles
@@ -513,7 +413,7 @@ class SokobanSolver:
         pygame.display.flip()
 
     def _draw_tile(self, screen: pygame.Surface, rect: pygame.Rect, row: int, col: int) -> None:
-        """Draw a single board tile."""
+        # Draw a single board tile.
         cell_type = self.board[row][col]
         assets = getattr(self, 'assets', {})
         
@@ -537,7 +437,7 @@ class SokobanSolver:
                 pygame.draw.rect(screen, WHITE, rect)
 
     def _draw_boxes(self, screen: pygame.Surface, boxes_pos: list[tuple[int, int]]) -> None:
-        """Draw all boxes on the board."""
+        # Draw all boxes on the board.
         assets = getattr(self, 'assets', {})
         
         for box_pos in boxes_pos:
@@ -554,7 +454,7 @@ class SokobanSolver:
                 pygame.draw.rect(screen, color, box_rect)
 
     def _draw_player(self, screen: pygame.Surface, player_pos: tuple[int, int]) -> None:
-        """Draw the player on the board."""
+        # Draw the player on the board.
         player_rect = pygame.Rect(player_pos[1] * TILE_SIZE, player_pos[0] * TILE_SIZE, 
                                   TILE_SIZE, TILE_SIZE)
         assets = getattr(self, 'assets', {})
@@ -568,13 +468,7 @@ class SokobanSolver:
             pygame.draw.circle(screen, BLUE, player_rect.center, TILE_SIZE // 2 - 5)
 
     def visualize_pygame(self, solution_path: str, animation_speed: float = 0.5) -> None:
-        """
-        Visualize the solution using Pygame animation.
-        
-        Args:
-            solution_path: String of moves (e.g., "RRDLLU")
-            animation_speed: Speed of animation in seconds per move
-        """
+        # Visualize the solution using Pygame animation.
         if not solution_path:
             print("No solution to visualize.")
             return
@@ -642,15 +536,7 @@ class SokobanSolver:
 # ============================================================================
 
 def load_all_levels(config_file: str) -> list[tuple]:
-    """
-    Load all levels from a configuration file.
-    
-    Args:
-        config_file: Path to the level configuration file
-        
-    Returns:
-        List of tuples (board, player_pos, boxes_pos)
-    """
+    # Load all levels from a configuration file.
     with open(config_file, 'r') as f:
         content = f.read().strip()
     
@@ -679,15 +565,7 @@ def load_all_levels(config_file: str) -> list[tuple]:
 
 
 def load_level_config(config_file: str):
-    """
-    Load the first level from a configuration file.
-    
-    Args:
-        config_file: Path to the level configuration file
-        
-    Returns:
-        Tuple of (board, player_pos, boxes_pos) or empty defaults
-    """
+    # Load the first level from a configuration file.
     levels = load_all_levels(config_file)
     return levels[0] if levels else ([], (0, 0), [])
 
@@ -714,12 +592,13 @@ if __name__ == '__main__':
         if solution:
             # Display solution statistics
             print(f"Solution found in {solver.time_used:.3f}s")
+            print(f"Step needed: {len(solution)} step(s)")
             print(f"Moves: {solution}")
             print(f"Expanded nodes: {solver.expanded_nodes_count}")
             print(f"Visited nodes: {solver.visited_nodes_count}")
             
             # Visualize solution
-            solver.visualize_pygame(solution, animation_speed=0.2)
+            solver.visualize_pygame(solution, animation_speed=0.3)
             current_level += 1
             
             if current_level < len(levels):
