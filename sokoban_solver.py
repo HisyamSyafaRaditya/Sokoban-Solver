@@ -368,12 +368,12 @@ class SokobanSolver:
     # ========================================================================
 
     def _load_assets(self, tile_size: int) -> dict:
-        """Load game assets (images) from the images directory."""
+        # Load game assets (images) from the images directory.
         assets = {}
         base_dir = os.path.join(os.path.dirname(__file__), 'images')
         
         def load_image(filename: str, size: tuple = None) -> pygame.Surface:
-            """Load and scale an image."""
+            # Load and scale an image.
             path = os.path.join(base_dir, filename)
             if not os.path.exists(path):
                 return None
