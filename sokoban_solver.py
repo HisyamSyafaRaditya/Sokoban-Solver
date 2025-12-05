@@ -1,8 +1,13 @@
+"""
+Sokoban Solver using A* Search Algorithm with Dead Space Detection
+"""
+
 import time
 import pygame
 import os
 from collections import deque
 
+# Color constants
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BROWN = (139, 69, 19)
@@ -11,244 +16,457 @@ GREEN = (0, 128, 0)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 
+# Game constants
 TILE_SIZE = 50
+INFINITY = 999999
+
+# Direction mappings
+DIRECTIONS = {
+    'R': (0, 1),   # Right
+    'L': (0, -1),  # Left
+    'D': (1, 0),   # Down
+    'U': (-1, 0)   # Up
+}
+
+# Board cell types
+WALL = '1'
+GOAL = '2'
+EMPTY = '0'
 
 
 class SokobanSolver:
+    """
+    Solves Sokoban puzzles using A* search algorithm with dead space detection.
+    """
 
     def __init__(self, board: list[str], player_pos: tuple, boxes_pos: list[tuple]):
+        """
+        Initialize the Sokoban solver.
+        
+        Args:
+            board: 2D grid representing the game board
+            player_pos: Initial position of the player (row, col)
+            boxes_pos: List of initial box positions [(row, col), ...]
+        """
         self.board = board
         self.init_player_pos = player_pos
         self.init_boxes_pos = boxes_pos
-        self.goals_pos = [(r, c) for r in range(len(board))
-                          for c in range(len(board[r])) if board[r][c] == '2']
+        
+        # Extract goal positions from board
+        self.goals_pos = [
+            (row, col) 
+            for row in range(len(board))
+            for col in range(len(board[row])) 
+            if board[row][col] == GOAL
+        ]
+        
+        # Board dimensions
         self.width = len(board[0]) if board else 0
         self.height = len(board)
 
-        self.dead_space = self.generate_dead_space_matrix()
-        self.minimum_distance_map = {}
-        for goal_pos in self.goals_pos:
-            self.minimum_distance_map[goal_pos] = self.minimum_distances(goal_pos)
+        # Precompute dead spaces and distance maps
+        self.dead_space = self._generate_dead_space_matrix()
+        self.minimum_distance_map = self._precompute_distance_maps()
 
+        # Search state
         self.visited_states = {}
         self.fringe = []
+        
+        # Solution and statistics
         self.solution = None
         self.expanded_nodes_count = 0
         self.visited_nodes_count = 0
         self.time_used = 0
 
-    def is_corner(self, r: int, c: int) -> bool:
+    # ========================================================================
+    # Dead Space Detection Methods
+    # ========================================================================
+
+    def _is_corner(self, row: int, col: int) -> bool:
+        """
+        Check if a position is a corner (two adjacent walls).
+        
+        Args:
+            row: Row position
+            col: Column position
+            
+        Returns:
+            True if position is a corner, False otherwise
+        """
         corners = [
-            (self.board[r - 1][c] == '1' and self.board[r][c - 1] == '1'),
-            (self.board[r - 1][c] == '1' and self.board[r][c + 1] == '1'),
-            (self.board[r + 1][c] == '1' and self.board[r][c - 1] == '1'),
-            (self.board[r + 1][c] == '1' and self.board[r][c + 1] == '1')
+            (self.board[row - 1][col] == WALL and self.board[row][col - 1] == WALL),  # Top-left
+            (self.board[row - 1][col] == WALL and self.board[row][col + 1] == WALL),  # Top-right
+            (self.board[row + 1][col] == WALL and self.board[row][col - 1] == WALL),  # Bottom-left
+            (self.board[row + 1][col] == WALL and self.board[row][col + 1] == WALL)   # Bottom-right
         ]
         return any(corners)
 
-    def generate_dead_space_matrix(self) -> list[list[bool]]:
+    def _generate_dead_space_matrix(self) -> list[list[bool]]:
+        """
+        Generate a matrix marking dead spaces where boxes cannot be pushed to goals.
+        Dead spaces include corners and walls adjacent to corners.
+        
+        Returns:
+            2D boolean matrix where True indicates a dead space
+        """
         dead_space = [[False for _ in range(self.width)] for _ in range(self.height)]
 
-        for r in range(self.height):
-            for c in range(self.width):
-                if dead_space[r][c]:
-                    continue
-                if self.board[r][c] == '1':
-                    dead_space[r][c] = True
-                elif self.board[r][c] == '2':
-                    dead_space[r][c] = False
-                elif r > 0 and c > 0 and r < self.height - 1 and c < self.width - 1 and self.is_corner(r, c) and self.board[r][c] != '2':
-                    dead_space[r][c] = True
-
-        for r in range(self.height):
-            for c in range(self.width):
-                if self.board[r][c] == '1' or self.board[r][c] == '2':
-                    continue
-                elif dead_space[r][c]:
-                    continue
-                elif r > 0 and c > 0 and r < self.height - 1 and c < self.width - 1:
-                    if self.board[r-1][c] == '1' or self.board[r+1][c] == '1':
-                        left_c = c
-                        while left_c > 0 and self.board[r][left_c-1] != '1' and (self.board[r-1][left_c] == '1' or self.board[r+1][left_c] == '1') and self.board[r][left_c] != '2':
-                            left_c -= 1
-                        if not self.is_corner(r, left_c) or not dead_space[r][left_c]:
-                            continue
-
-                        right_c = c
-                        while right_c < self.width - 1 and self.board[r][right_c+1] != '1' and (self.board[r-1][right_c] == '1' or self.board[r+1][right_c] == '1') and self.board[r][right_c] != '2':
-                            right_c += 1
-                        if not self.is_corner(r, right_c) or not dead_space[r][right_c]:
-                            continue
-
-                        for cur_c in range(left_c, right_c + 1):
-                            dead_space[r][cur_c] = True
-
-                    if self.board[r][c-1] == '1' or self.board[r][c+1] == '1':
-                        top_r = r
-                        while top_r > 0 and self.board[top_r-1][c] != '1' and (self.board[top_r][c-1] == '1' or self.board[top_r][c+1] == '1') and self.board[top_r][c] != '2':
-                            top_r -= 1
-                        if not self.is_corner(top_r, c) or not dead_space[top_r][c]:
-                            continue
-
-                        bottom_r = r
-                        while bottom_r < self.height - 1 and self.board[bottom_r+1][c] != '1' and (self.board[bottom_r][c-1] == '1' or self.board[bottom_r][c+1] == '1') and self.board[bottom_r][c] != '2':
-                            bottom_r += 1
-                        if not self.is_corner(bottom_r, c) or not dead_space[bottom_r][c]:
-                            continue
-
-                        for cur_r in range(top_r, bottom_r + 1):
-                            dead_space[cur_r][c] = True
+        # Mark walls and corners as dead spaces
+        self._mark_walls_and_corners(dead_space)
+        
+        # Mark horizontal and vertical dead zones
+        self._mark_dead_zones(dead_space)
 
         return dead_space
 
-    def minimum_distances(self, start_pos: tuple[int, int]) -> list[list[int]]:
+    def _mark_walls_and_corners(self, dead_space: list[list[bool]]) -> None:
+        """Mark walls and corners as dead spaces."""
+        for row in range(self.height):
+            for col in range(self.width):
+                if dead_space[row][col]:
+                    continue
+                    
+                if self.board[row][col] == WALL:
+                    dead_space[row][col] = True
+                elif self.board[row][col] == GOAL:
+                    dead_space[row][col] = False
+                elif self._is_valid_position(row, col) and self._is_corner(row, col):
+                    dead_space[row][col] = True
+
+    def _mark_dead_zones(self, dead_space: list[list[bool]]) -> None:
+        """Mark horizontal and vertical dead zones between corners."""
+        for row in range(self.height):
+            for col in range(self.width):
+                if not self._should_check_dead_zone(row, col, dead_space):
+                    continue
+
+                # Check horizontal dead zones
+                if self.board[row - 1][col] == WALL or self.board[row + 1][col] == WALL:
+                    self._mark_horizontal_dead_zone(row, col, dead_space)
+
+                # Check vertical dead zones
+                if self.board[row][col - 1] == WALL or self.board[row][col + 1] == WALL:
+                    self._mark_vertical_dead_zone(row, col, dead_space)
+
+    def _should_check_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> bool:
+        """Check if a position should be evaluated for dead zones."""
+        if self.board[row][col] == WALL or self.board[row][col] == GOAL:
+            return False
+        if dead_space[row][col]:
+            return False
+        return self._is_valid_position(row, col)
+
+    def _mark_horizontal_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> None:
+        """Mark horizontal dead zone if conditions are met."""
+        # Find left boundary
+        left_col = col
+        while (left_col > 0 and 
+               self.board[row][left_col - 1] != WALL and
+               (self.board[row - 1][left_col] == WALL or self.board[row + 1][left_col] == WALL) and
+               self.board[row][left_col] != GOAL):
+            left_col -= 1
+
+        if not self._is_corner(row, left_col) or not dead_space[row][left_col]:
+            return
+
+        # Find right boundary
+        right_col = col
+        while (right_col < self.width - 1 and 
+               self.board[row][right_col + 1] != WALL and
+               (self.board[row - 1][right_col] == WALL or self.board[row + 1][right_col] == WALL) and
+               self.board[row][right_col] != GOAL):
+            right_col += 1
+
+        if not self._is_corner(row, right_col) or not dead_space[row][right_col]:
+            return
+
+        # Mark entire horizontal zone as dead
+        for current_col in range(left_col, right_col + 1):
+            dead_space[row][current_col] = True
+
+    def _mark_vertical_dead_zone(self, row: int, col: int, dead_space: list[list[bool]]) -> None:
+        """Mark vertical dead zone if conditions are met."""
+        # Find top boundary
+        top_row = row
+        while (top_row > 0 and 
+               self.board[top_row - 1][col] != WALL and
+               (self.board[top_row][col - 1] == WALL or self.board[top_row][col + 1] == WALL) and
+               self.board[top_row][col] != GOAL):
+            top_row -= 1
+
+        if not self._is_corner(top_row, col) or not dead_space[top_row][col]:
+            return
+
+        # Find bottom boundary
+        bottom_row = row
+        while (bottom_row < self.height - 1 and 
+               self.board[bottom_row + 1][col] != WALL and
+               (self.board[bottom_row][col - 1] == WALL or self.board[bottom_row][col + 1] == WALL) and
+               self.board[bottom_row][col] != GOAL):
+            bottom_row += 1
+
+        if not self._is_corner(bottom_row, col) or not dead_space[bottom_row][col]:
+            return
+
+        # Mark entire vertical zone as dead
+        for current_row in range(top_row, bottom_row + 1):
+            dead_space[current_row][col] = True
+
+    def _is_valid_position(self, row: int, col: int) -> bool:
+        """Check if position is within valid bounds (not on edges)."""
+        return 0 < row < self.height - 1 and 0 < col < self.width - 1
+
+    # ========================================================================
+    # Heuristic and Distance Calculation Methods
+    # ========================================================================
+
+    def _precompute_distance_maps(self) -> dict:
+        """
+        Precompute minimum distances from each goal to all positions.
+        
+        Returns:
+            Dictionary mapping goal positions to distance matrices
+        """
+        distance_map = {}
+        for goal_pos in self.goals_pos:
+            distance_map[goal_pos] = self._compute_minimum_distances(goal_pos)
+        return distance_map
+
+    def _compute_minimum_distances(self, start_pos: tuple[int, int]) -> list[list[int]]:
+        """
+        Compute minimum distances from start position to all reachable positions using BFS.
+        
+        Args:
+            start_pos: Starting position (row, col)
+            
+        Returns:
+            2D matrix of minimum distances
+        """
         visited = [[False] * self.width for _ in range(self.height)]
-        dist = [[999999] * self.width for _ in range(self.height)]
-        dist[start_pos[0]][start_pos[1]] = 0
+        distances = [[INFINITY] * self.width for _ in range(self.height)]
+        distances[start_pos[0]][start_pos[1]] = 0
+        
         queue = deque([(start_pos, 0)])
         
         while queue:
-            pos, d = queue.popleft()
-            if visited[pos[0]][pos[1]]:
-                continue
-            visited[pos[0]][pos[1]] = True
-            dist[pos[0]][pos[1]] = d
+            position, distance = queue.popleft()
+            row, col = position
             
-            for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                new_pos = (pos[0] + dr, pos[1] + dc)
-                if 0 <= new_pos[0] < self.height and 0 <= new_pos[1] < self.width:
-                    if self.board[new_pos[0]][new_pos[1]] != '1':
-                        queue.append((new_pos, d + 1))
-        return dist
+            if visited[row][col]:
+                continue
+                
+            visited[row][col] = True
+            distances[row][col] = distance
+            
+            # Explore all four directions
+            for delta_row, delta_col in DIRECTIONS.values():
+                new_row = row + delta_row
+                new_col = col + delta_col
+                
+                if self._is_position_in_bounds(new_row, new_col):
+                    if self.board[new_row][new_col] != WALL:
+                        queue.append(((new_row, new_col), distance + 1))
+                        
+        return distances
 
-    def h(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> int:
-        return sum(min(self.minimum_distance_map[goal][box[0]][box[1]]
-                       for goal in self.goals_pos)
-                   for box in state[1])
+    def _is_position_in_bounds(self, row: int, col: int) -> bool:
+        """Check if position is within board bounds."""
+        return 0 <= row < self.height and 0 <= col < self.width
 
-    def is_goal(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> bool:
-        return all(self.board[box[0]][box[1]] == '2' for box in state[1])
-
-    def insert_into_fringe(self, node: tuple) -> None:
-        state = (node[0], tuple(sorted(node[1])))
+    def _calculate_heuristic(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> int:
+        """
+        Calculate heuristic value for a state (sum of minimum distances from boxes to goals).
         
+        Args:
+            state: Tuple of (player_pos, boxes_positions)
+            
+        Returns:
+            Heuristic value
+        """
+        _, boxes = state
+        total_distance = 0
+        
+        for box in boxes:
+            min_distance = min(
+                self.minimum_distance_map[goal][box[0]][box[1]]
+                for goal in self.goals_pos
+            )
+            total_distance += min_distance
+            
+        return total_distance
+
+    # ========================================================================
+    # Search Algorithm Methods
+    # ========================================================================
+
+    def _is_goal_state(self, state: tuple[tuple[int, int], list[tuple[int, int]]]) -> bool:
+        """
+        Check if all boxes are on goal positions.
+        
+        Args:
+            state: Tuple of (player_pos, boxes_positions)
+            
+        Returns:
+            True if goal state, False otherwise
+        """
+        _, boxes = state
+        return all(self.board[box[0]][box[1]] == GOAL for box in boxes)
+
+    def _insert_into_fringe(self, node: tuple) -> None:
+        """
+        Insert a node into the fringe (priority queue) sorted by f-value.
+        
+        Args:
+            node: Tuple of (player_pos, boxes_pos, g_cost, h_cost, path)
+        """
+        player_pos, boxes_pos, g_cost, h_cost, path = node
+        state = (player_pos, tuple(sorted(boxes_pos)))
+        
+        # Skip if already visited
         if state in self.visited_states:
             return
         
         self.expanded_nodes_count += 1
-        f = node[2] + node[3]
+        f_value = g_cost + h_cost
         
-        for i in range(len(self.fringe)):
-            if self.fringe[i][2] + self.fringe[i][3] > f:
-                self.fringe.insert(i, (node[0], state[1], node[2], node[3], node[4]))
+        # Insert in sorted order by f-value
+        for index in range(len(self.fringe)):
+            fringe_f_value = self.fringe[index][2] + self.fringe[index][3]
+            if fringe_f_value > f_value:
+                self.fringe.insert(index, (player_pos, state[1], g_cost, h_cost, path))
                 return
-        self.fringe.append((node[0], state[1], node[2], node[3], node[4]))
+                
+        self.fringe.append((player_pos, state[1], g_cost, h_cost, path))
 
     def solve(self) -> str:
+        """
+        Solve the Sokoban puzzle using A* search.
+        
+        Returns:
+            Solution path as string of moves (e.g., "RRDLLU") or None if no solution
+        """
         start_time = time.time()
-        init_state = (self.init_player_pos, self.init_boxes_pos)
-        self.insert_into_fringe((self.init_player_pos, self.init_boxes_pos, 0, self.h(init_state), ''))
+        
+        # Initialize with starting state
+        initial_state = (self.init_player_pos, self.init_boxes_pos)
+        initial_heuristic = self._calculate_heuristic(initial_state)
+        self._insert_into_fringe((self.init_player_pos, self.init_boxes_pos, 0, initial_heuristic, ''))
 
         while self.fringe:
+            # Get node with lowest f-value
             node = self.fringe.pop(0)
-            state = (node[0], node[1])
+            player_pos, boxes_pos, g_cost, h_cost, path = node
+            state = (player_pos, boxes_pos)
+            
             self.visited_nodes_count += 1
             
-            if self.is_goal(state):
-                self.solution = node[4]
+            # Check if goal state
+            if self._is_goal_state(state):
+                self.solution = path
                 self.time_used = time.time() - start_time
-                return node[4]
+                return path
 
+            # Skip if already visited
             if state in self.visited_states:
                 continue
             self.visited_states[state] = True
 
-            for dr, dc, op in [(0, 1, 'R'), (0, -1, 'L'), (1, 0, 'D'), (-1, 0, 'U')]:
-                new_player_pos = (node[0][0] + dr, node[0][1] + dc)
-                new_boxes_pos = list(node[1])
-                
-                if not (0 <= new_player_pos[0] < self.height and 0 <= new_player_pos[1] < self.width):
-                    continue
-                if self.board[new_player_pos[0]][new_player_pos[1]] == '1':
-                    continue
-                
-                if new_player_pos in new_boxes_pos:
-                    new_box_pos = (new_player_pos[0] + dr, new_player_pos[1] + dc)
-                    if not (0 <= new_box_pos[0] < self.height and 0 <= new_box_pos[1] < self.width):
-                        continue
-                    if self.board[new_box_pos[0]][new_box_pos[1]] == '1':
-                        continue
-                    if new_box_pos in new_boxes_pos:
-                        continue
-                    if self.dead_space[new_box_pos[0]][new_box_pos[1]]:
-                        continue
-                    
-                    new_boxes_pos[new_boxes_pos.index(new_player_pos)] = new_box_pos
-                
-                new_state = (new_player_pos, new_boxes_pos)
-                new_node = (new_player_pos, new_boxes_pos, node[2] + 1, self.h(new_state), node[4] + op)
-                self.insert_into_fringe(new_node)
+            # Explore all possible moves
+            self._explore_moves(node)
 
+        # No solution found
         self.solution = None
         self.time_used = time.time() - start_time
         return None
 
-    def draw_board_pygame(self, screen, player_pos: tuple[int, int], boxes_pos: list[tuple[int, int]]) -> None:
-        screen.fill(BLACK)
-
-        for r in range(self.height):
-            for c in range(self.width):
-                rect = pygame.Rect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                cell_type = self.board[r][c]
-                
-                if cell_type == '1':
-                    img = getattr(self, 'assets', {}).get('wall')
-                    if img:
-                        screen.blit(img, rect)
-                    else:
-                        pygame.draw.rect(screen, BROWN, rect)
-                elif cell_type == '2':
-                    img = getattr(self, 'assets', {}).get('endpoint')
-                    if img:
-                        screen.blit(img, rect)
-                    else:
-                        pygame.draw.rect(screen, GRAY, rect)
-                else:
-                    img = getattr(self, 'assets', {}).get('ground')
-                    if img:
-                        screen.blit(img, rect)
-                    else:
-                        pygame.draw.rect(screen, WHITE, rect)
-
-        for box_pos in boxes_pos:
-            box_rect = pygame.Rect(box_pos[1] * TILE_SIZE, box_pos[0] * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            on_target = self.board[box_pos[0]][box_pos[1]] == '2'
-            assets = getattr(self, 'assets', {})
+    def _explore_moves(self, node: tuple) -> None:
+        """
+        Explore all possible moves from current node.
+        
+        Args:
+            node: Current node (player_pos, boxes_pos, g_cost, h_cost, path)
+        """
+        player_pos, boxes_pos, g_cost, h_cost, path = node
+        
+        for direction, (delta_row, delta_col) in DIRECTIONS.items():
+            new_player_pos = (player_pos[0] + delta_row, player_pos[1] + delta_col)
             
-            if on_target and assets.get('box_on_target'):
-                screen.blit(assets['box_on_target'], box_rect)
-            elif assets.get('crate'):
-                screen.blit(assets['crate'], box_rect)
-            else:
-                pygame.draw.rect(screen, GREEN if on_target else YELLOW, box_rect)
+            # Check if move is valid
+            if not self._is_move_valid(new_player_pos):
+                continue
+            
+            # Handle box pushing
+            new_boxes_pos = list(boxes_pos)
+            if new_player_pos in new_boxes_pos:
+                if not self._try_push_box(new_player_pos, delta_row, delta_col, new_boxes_pos):
+                    continue
+            
+            # Create new state and add to fringe
+            new_state = (new_player_pos, new_boxes_pos)
+            new_heuristic = self._calculate_heuristic(new_state)
+            new_node = (new_player_pos, new_boxes_pos, g_cost + 1, new_heuristic, path + direction)
+            self._insert_into_fringe(new_node)
 
-        player_rect = pygame.Rect(player_pos[1] * TILE_SIZE, player_pos[0] * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        assets = getattr(self, 'assets', {})
-        if assets.get('player'):
-            player_img = assets['player']
-            dest = player_img.get_rect()
-            dest.center = player_rect.center
-            screen.blit(player_img, dest)
-        else:
-            pygame.draw.circle(screen, BLUE, player_rect.center, TILE_SIZE // 2 - 5)
+    def _is_move_valid(self, position: tuple[int, int]) -> bool:
+        """Check if a move to the given position is valid."""
+        row, col = position
+        
+        if not self._is_position_in_bounds(row, col):
+            return False
+        if self.board[row][col] == WALL:
+            return False
+            
+        return True
 
-        pygame.display.flip()
+    def _try_push_box(self, box_pos: tuple[int, int], delta_row: int, delta_col: int, 
+                      boxes_list: list[tuple[int, int]]) -> bool:
+        """
+        Try to push a box in the given direction.
+        
+        Args:
+            box_pos: Current box position
+            delta_row: Row direction
+            delta_col: Column direction
+            boxes_list: List of box positions (modified in place)
+            
+        Returns:
+            True if push is valid, False otherwise
+        """
+        new_box_pos = (box_pos[0] + delta_row, box_pos[1] + delta_col)
+        
+        # Check if new box position is valid
+        if not self._is_position_in_bounds(new_box_pos[0], new_box_pos[1]):
+            return False
+        if self.board[new_box_pos[0]][new_box_pos[1]] == WALL:
+            return False
+        if new_box_pos in boxes_list:
+            return False
+        if self.dead_space[new_box_pos[0]][new_box_pos[1]]:
+            return False
+        
+        # Update box position
+        boxes_list[boxes_list.index(box_pos)] = new_box_pos
+        return True
 
-    def load_assets(self, tile_size: int) -> dict:
+    # ========================================================================
+    # Visualization Methods
+    # ========================================================================
+
+    def _load_assets(self, tile_size: int) -> dict:
+        """
+        Load game assets (images) from the images directory.
+        
+        Args:
+            tile_size: Size of each tile in pixels
+            
+        Returns:
+            Dictionary of loaded assets
+        """
         assets = {}
         base_dir = os.path.join(os.path.dirname(__file__), 'images')
         
         def load_image(filename: str, size: tuple = None) -> pygame.Surface:
+            """Load and scale an image."""
             path = os.path.join(base_dir, filename)
             if not os.path.exists(path):
                 return None
@@ -258,15 +476,105 @@ class SokobanSolver:
             except Exception:
                 return None
         
+        # Load all game assets
         assets['wall'] = load_image('wall.png', (tile_size, tile_size))
         assets['ground'] = load_image('space.png', (tile_size, tile_size))
         assets['crate'] = load_image('box.png', (tile_size, tile_size))
         assets['box_on_target'] = load_image('box_on_target.png', (tile_size, tile_size))
         assets['endpoint'] = load_image('target.png', (tile_size, tile_size))
         assets['player'] = load_image('player.png', (tile_size - 10, tile_size - 10))
+        
         return assets
 
+    def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
+                    boxes_pos: list[tuple[int, int]]) -> None:
+        """
+        Draw the game board with current state.
+        
+        Args:
+            screen: Pygame surface to draw on
+            player_pos: Current player position
+            boxes_pos: Current box positions
+        """
+        screen.fill(BLACK)
+
+        # Draw board tiles
+        for row in range(self.height):
+            for col in range(self.width):
+                rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                self._draw_tile(screen, rect, row, col)
+
+        # Draw boxes
+        self._draw_boxes(screen, boxes_pos)
+
+        # Draw player
+        self._draw_player(screen, player_pos)
+
+        pygame.display.flip()
+
+    def _draw_tile(self, screen: pygame.Surface, rect: pygame.Rect, row: int, col: int) -> None:
+        """Draw a single board tile."""
+        cell_type = self.board[row][col]
+        assets = getattr(self, 'assets', {})
+        
+        if cell_type == WALL:
+            img = assets.get('wall')
+            if img:
+                screen.blit(img, rect)
+            else:
+                pygame.draw.rect(screen, BROWN, rect)
+        elif cell_type == GOAL:
+            img = assets.get('endpoint')
+            if img:
+                screen.blit(img, rect)
+            else:
+                pygame.draw.rect(screen, GRAY, rect)
+        else:
+            img = assets.get('ground')
+            if img:
+                screen.blit(img, rect)
+            else:
+                pygame.draw.rect(screen, WHITE, rect)
+
+    def _draw_boxes(self, screen: pygame.Surface, boxes_pos: list[tuple[int, int]]) -> None:
+        """Draw all boxes on the board."""
+        assets = getattr(self, 'assets', {})
+        
+        for box_pos in boxes_pos:
+            box_rect = pygame.Rect(box_pos[1] * TILE_SIZE, box_pos[0] * TILE_SIZE, 
+                                   TILE_SIZE, TILE_SIZE)
+            on_target = self.board[box_pos[0]][box_pos[1]] == GOAL
+            
+            if on_target and assets.get('box_on_target'):
+                screen.blit(assets['box_on_target'], box_rect)
+            elif assets.get('crate'):
+                screen.blit(assets['crate'], box_rect)
+            else:
+                color = GREEN if on_target else YELLOW
+                pygame.draw.rect(screen, color, box_rect)
+
+    def _draw_player(self, screen: pygame.Surface, player_pos: tuple[int, int]) -> None:
+        """Draw the player on the board."""
+        player_rect = pygame.Rect(player_pos[1] * TILE_SIZE, player_pos[0] * TILE_SIZE, 
+                                  TILE_SIZE, TILE_SIZE)
+        assets = getattr(self, 'assets', {})
+        
+        if assets.get('player'):
+            player_img = assets['player']
+            dest = player_img.get_rect()
+            dest.center = player_rect.center
+            screen.blit(player_img, dest)
+        else:
+            pygame.draw.circle(screen, BLUE, player_rect.center, TILE_SIZE // 2 - 5)
+
     def visualize_pygame(self, solution_path: str, animation_speed: float = 0.5) -> None:
+        """
+        Visualize the solution using Pygame animation.
+        
+        Args:
+            solution_path: String of moves (e.g., "RRDLLU")
+            animation_speed: Speed of animation in seconds per move
+        """
         if not solution_path:
             print("No solution to visualize.")
             return
@@ -279,43 +587,49 @@ class SokobanSolver:
         pygame.display.set_caption('Sokoban Solver Animation')
         
         try:
-            self.assets = self.load_assets(TILE_SIZE)
+            self.assets = self._load_assets(TILE_SIZE)
         except Exception:
             self.assets = {}
 
+        # Initialize animation state
         current_pos = self.init_player_pos
         current_boxes = list(self.init_boxes_pos)
         step_index = 0
         clock = pygame.time.Clock()
         running = True
 
-        self.draw_board_pygame(screen, current_pos, current_boxes)
+        # Draw initial state
+        self._draw_board(screen, current_pos, current_boxes)
         pygame.time.wait(int(animation_speed * 1000 * 2))
 
+        # Animate solution
         while running and step_index < len(solution_path):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     running = False
 
             if step_index < len(solution_path):
-                op = solution_path[step_index]
-                dr, dc = {'R': (0, 1), 'L': (0, -1), 'D': (1, 0), 'U': (-1, 0)}.get(op, (0, 0))
+                # Execute next move
+                move = solution_path[step_index]
+                delta_row, delta_col = DIRECTIONS.get(move, (0, 0))
 
-                next_pos = (current_pos[0] + dr, current_pos[1] + dc)
+                next_pos = (current_pos[0] + delta_row, current_pos[1] + delta_col)
                 next_boxes = current_boxes[:]
 
+                # Handle box pushing
                 if next_pos in next_boxes:
-                    next_box_pos = (next_pos[0] + dr, next_pos[1] + dc)
+                    next_box_pos = (next_pos[0] + delta_row, next_pos[1] + delta_col)
                     next_boxes[next_boxes.index(next_pos)] = next_box_pos
 
                 current_pos = next_pos
                 current_boxes = next_boxes
 
-                self.draw_board_pygame(screen, current_pos, current_boxes)
+                # Draw updated state
+                self._draw_board(screen, current_pos, current_boxes)
                 pygame.time.wait(int(animation_speed * 1000))
                 step_index += 1
             else:
-                self.draw_board_pygame(screen, current_pos, current_boxes)
+                self._draw_board(screen, current_pos, current_boxes)
                 clock.tick(10)
 
         print("Animation complete. Window closed.")
@@ -323,7 +637,20 @@ class SokobanSolver:
             pygame.quit()
 
 
+# ============================================================================
+# Level Loading Functions
+# ============================================================================
+
 def load_all_levels(config_file: str) -> list[tuple]:
+    """
+    Load all levels from a configuration file.
+    
+    Args:
+        config_file: Path to the level configuration file
+        
+    Returns:
+        List of tuples (board, player_pos, boxes_pos)
+    """
     with open(config_file, 'r') as f:
         content = f.read().strip()
     
@@ -335,12 +662,14 @@ def load_all_levels(config_file: str) -> list[tuple]:
         if not lines:
             continue
         
+        # Parse board
         board = []
         i = 0
         while i < len(lines) and all(c in '012' for c in lines[i]):
             board.append(lines[i])
             i += 1
         
+        # Parse player and box positions
         if i < len(lines):
             player_pos = tuple(map(int, lines[i].split(',')))
             boxes_pos = [tuple(map(int, pos.split(','))) for pos in lines[i + 1].split(';')]
@@ -350,9 +679,22 @@ def load_all_levels(config_file: str) -> list[tuple]:
 
 
 def load_level_config(config_file: str):
+    """
+    Load the first level from a configuration file.
+    
+    Args:
+        config_file: Path to the level configuration file
+        
+    Returns:
+        Tuple of (board, player_pos, boxes_pos) or empty defaults
+    """
     levels = load_all_levels(config_file)
     return levels[0] if levels else ([], (0, 0), [])
 
+
+# ============================================================================
+# Main Program
+# ============================================================================
 
 if __name__ == '__main__':
     levels = load_all_levels('level/level.txt')
@@ -360,19 +702,23 @@ if __name__ == '__main__':
     
     while current_level < len(levels):
         board, player_pos, boxes_pos = levels[current_level]
-        print(f"\n{'='*50}")
-        print(f"Level {current_level + 1} / {len(levels)}")
-        print(f"{'='*50}")
         
+        print(f"\n{'=' * 50}")
+        print(f"Level {current_level + 1} / {len(levels)}")
+        print(f"{'=' * 50}")
+        
+        # Solve the level
         solver = SokobanSolver(board, player_pos, boxes_pos)
         solution = solver.solve()
         
         if solution:
+            # Display solution statistics
             print(f"Solution found in {solver.time_used:.3f}s")
             print(f"Moves: {solution}")
             print(f"Expanded nodes: {solver.expanded_nodes_count}")
             print(f"Visited nodes: {solver.visited_nodes_count}")
             
+            # Visualize solution
             solver.visualize_pygame(solution, animation_speed=0.2)
             current_level += 1
             
