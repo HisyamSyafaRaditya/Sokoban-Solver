@@ -394,13 +394,13 @@ if __name__ == '__main__':
         
         if result == 'next':
             # Level completed manually
-            print("✓ Level completed manually!")
+            print("Level completed manually!")
             current_level += 1
             
             if current_level < len(levels):
                 print(f"\nProceeding to Level {current_level + 1}...")
             else:
-                print("\n🎉 All levels completed! Congratulations!")
+                print("\nAll levels completed! Congratulations!!!")
         
         elif result == 'auto':
             # User requested auto-solve from current state
@@ -427,7 +427,7 @@ if __name__ == '__main__':
                 if current_level < len(levels):
                     print(f"\nProceeding to Level {current_level + 1}...")
                 else:
-                    print("\n🎉 All levels completed!")
+                    print("\nAll levels completed!")
             else:
                 print("No solution found from current position.")
                 retry = input("Retry this level? (y/n): ").strip().lower()
