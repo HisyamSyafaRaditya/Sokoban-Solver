@@ -1,6 +1,3 @@
-# Ignore old combined file
-sokoban_solver.py
-
 # Python cache files
 __pycache__/
 *.py[cod]
