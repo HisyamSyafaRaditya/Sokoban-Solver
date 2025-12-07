@@ -27,7 +27,7 @@ class SokobanGame:
     def _load_assets(self, tile_size: int) -> dict:
         # Load game assets (images) from the images directory.
         assets = {}
-        base_dir = os.path.join(os.path.dirname(__file__), 'images')
+        base_dir = os.path.join(os.path.dirname(__file__), 'assets')
         
         def load_image(filename: str, size: tuple = None) -> pygame.Surface:
             # Load and scale an image.
@@ -46,9 +46,16 @@ class SokobanGame:
         assets['crate'] = load_image('box.png', (tile_size, tile_size))
         assets['box_on_target'] = load_image('box_on_target.png', (tile_size, tile_size))
         assets['endpoint'] = load_image('target.png', (tile_size, tile_size))
-        assets['player'] = load_image('player.png', (tile_size - 10, tile_size - 10))
+        
+        # Load player sprites for animation
+        player1 = load_image('player.png', (tile_size - 10, tile_size - 10))
+        player2 = load_image('player2.png', (tile_size - 10, tile_size - 10))
+        
+        # Create player animation list
+        assets['player_frames'] = [player1, player2] if player1 and player2 else [player1] if player1 else []
         
         return assets
+
 
     def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
                     boxes_pos: list[tuple[int, int]]) -> None:
@@ -108,39 +115,25 @@ class SokobanGame:
                 pygame.draw.rect(screen, color, box_rect)
 
     def _draw_player(self, screen: pygame.Surface, player_pos: tuple[int, int]) -> None:
-        # Draw the player on the board.
+        # Draw the player on the board with animation.
         player_rect = pygame.Rect(player_pos[1] * TILE_SIZE, player_pos[0] * TILE_SIZE, 
                                   TILE_SIZE, TILE_SIZE)
         
-        if self.assets.get('player'):
-            player_img = self.assets['player']
-            dest = player_img.get_rect()
-            dest.center = player_rect.center
-            screen.blit(player_img, dest)
+        player_frames = self.assets.get('player_frames', [])
+        if player_frames:
+            # Animate player by alternating frames every 500ms
+            frame_index = (pygame.time.get_ticks() // 500) % len(player_frames)
+            player_img = player_frames[frame_index]
+            
+            if player_img:
+                dest = player_img.get_rect()
+                dest.center = player_rect.center
+                screen.blit(player_img, dest)
+            else:
+                pygame.draw.circle(screen, BLUE, player_rect.center, TILE_SIZE // 2 - 5)
         else:
             pygame.draw.circle(screen, BLUE, player_rect.center, TILE_SIZE // 2 - 5)
 
-    def _draw_ui_text(self, screen: pygame.Surface, level_num: int, total_levels: int, mode: str) -> None:
-        # Draw UI text showing level info and controls.
-        try:
-            font = pygame.font.Font(None, 36)
-            small_font = pygame.font.Font(None, 24)
-        except:
-            return
-        
-        # Level info
-        level_text = font.render(f"Level {level_num}/{total_levels}", True, WHITE)
-        screen.blit(level_text, (10, 10))
-        
-        # Mode indicator
-        mode_color = GREEN if mode == "AUTO" else YELLOW
-        mode_text = font.render(f"Mode: {mode}", True, mode_color)
-        screen.blit(mode_text, (10, 50))
-        
-        # Controls hint
-        if mode == "MANUAL":
-            controls = small_font.render("WASD: Move | SPACE: Auto-Solve | R: Restart | ESC: Quit", True, GRAY)
-            screen.blit(controls, (10, self.solver.height * TILE_SIZE - 30))
 
     def _handle_manual_move(self, direction: str, player_pos: tuple[int, int], 
                            boxes_pos: list[tuple[int, int]]) -> tuple[tuple[int, int], list[tuple[int, int]], bool]:
@@ -173,8 +166,6 @@ class SokobanGame:
         return new_player_pos, new_boxes_pos, True
 
     def play_manual(self, level_num: int, total_levels: int) -> tuple[str, tuple, list]:
-        # Main manual play mode - returns (result, current_pos, current_boxes).
-        # result can be 'next', 'auto', or 'quit'
         if not pygame.get_init():
             pygame.init()
 
@@ -196,7 +187,6 @@ class SokobanGame:
 
         # Draw initial state
         self._draw_board(screen, current_pos, current_boxes)
-        self._draw_ui_text(screen, level_num, total_levels, "MANUAL")
         pygame.display.flip()
 
         # Main game loop
@@ -235,13 +225,27 @@ class SokobanGame:
                     if all(self.solver.board[box[0]][box[1]] == GOAL for box in current_boxes):
                         # Draw winning state
                         self._draw_board(screen, current_pos, current_boxes)
-                        self._draw_ui_text(screen, level_num, total_levels, "MANUAL")
                         
-                        # Show win message
+                        # Show win message with background
                         try:
                             font = pygame.font.Font(None, 72)
                             win_text = font.render("LEVEL COMPLETE!", True, GREEN)
                             text_rect = win_text.get_rect(center=(self.solver.width * TILE_SIZE // 2, self.solver.height * TILE_SIZE // 2))
+                            
+                            # Draw semi-transparent background box
+                            padding = 20
+                            bg_rect = pygame.Rect(
+                                text_rect.x - padding,
+                                text_rect.y - padding,
+                                text_rect.width + padding * 2,
+                                text_rect.height + padding * 2
+                            )
+                            bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+                            pygame.draw.rect(bg_surface, (0, 0, 0, 200), bg_surface.get_rect(), border_radius=15)
+                            pygame.draw.rect(bg_surface, GREEN, bg_surface.get_rect(), width=3, border_radius=15)
+                            screen.blit(bg_surface, (bg_rect.x, bg_rect.y))
+                            
+                            # Draw text
                             screen.blit(win_text, text_rect)
                             pygame.display.flip()
                             pygame.time.wait(1500)
@@ -253,7 +257,6 @@ class SokobanGame:
             
             # Redraw screen
             self._draw_board(screen, current_pos, current_boxes)
-            self._draw_ui_text(screen, level_num, total_levels, "MANUAL")
             pygame.display.flip()
             clock.tick(30)
 
