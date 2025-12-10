@@ -10,6 +10,7 @@ GRAY = (128, 128, 128)
 GREEN = (0, 128, 0)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
+SSS = (26, 26, 26)
 
 # Game constants
 TILE_SIZE = 50
@@ -46,10 +47,11 @@ class SokobanGame:
     Sokoban game with manual play mode and auto-solve visualization.
     """
 
-    def __init__(self, solver: SokobanSolver):
+    def __init__(self, solver: SokobanSolver, best_score: int = 0):
         self.solver = solver
         self.assets = {}
         self.buttons = []
+        self.best_score = best_score
 
     def _init_ui(self):
         self.buttons = [
@@ -81,7 +83,7 @@ class SokobanGame:
         assets['endpoint'] = load_image('target.png', (tile_size, tile_size))
         
         # Load player sprites for animation
-        player1 = load_image('player.png', (tile_size - 10, tile_size - 10))
+        player1 = load_image('player1.png', (tile_size - 10, tile_size - 10))
         player2 = load_image('player2.png', (tile_size - 10, tile_size - 10))
         
         # Create player animation list
@@ -93,7 +95,7 @@ class SokobanGame:
     def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
                     boxes_pos: list[tuple[int, int]], moves_count: int = 0) -> None:
         # Draw the game board with current state.
-        screen.fill(BLACK)
+        screen.fill(SSS)
 
         # Calculate offsets to center the board
         board_width = self.solver.width * TILE_SIZE
@@ -121,6 +123,12 @@ class SokobanGame:
         font = pygame.font.Font(None, 48)
         text = font.render(f"Moves: {moves_count}", True, WHITE)
         screen.blit(text, (50, 100))
+        
+        # Draw Best Score
+        if self.best_score > 0:
+            best_text = f"Best: {self.best_score}"
+            text_best = font.render(best_text, True, WHITE)
+            screen.blit(text_best, (SCREEN_WIDTH - 250, 100))
 
         pygame.display.flip()
 
@@ -213,7 +221,7 @@ class SokobanGame:
         
         return new_player_pos, new_boxes_pos, True
 
-    def play_manual(self, level_num: int, total_levels: int) -> tuple[str, tuple, list]:
+    def play_manual(self, level_num: int, total_levels: int, level_path: str = None) -> tuple[str, tuple, list]:
         if not pygame.get_init():
             pygame.init()
 
@@ -300,6 +308,12 @@ class SokobanGame:
                             font = pygame.font.Font(None, 72)
                             win_text = font.render("LEVEL COMPLETE!", True, GREEN)
                             text_rect = win_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+
+                            # Update best score
+                            if level_path and (self.best_score == 0 or moves_count < self.best_score):
+                                save_best_score(level_path, moves_count)
+                                print(f"New Best Score: {moves_count}!")
+                                self.best_score = moves_count
                             
                             # Draw semi-transparent background box
                             padding = 20
@@ -399,31 +413,96 @@ class SokobanGame:
 # Level Loading Functions
 # ============================================================================
 
-def load_all_levels(config_file: str) -> list[tuple]:
-    # Load all levels from a configuration file.
-    with open(config_file, 'r') as f:
-        content = f.read().strip()
+def save_best_score(filepath: str, new_score: int):
+    # Update the best score in the level file.
+    try:
+        with open(filepath, 'r') as f:
+            lines = f.readlines()
+        
+        best_score_line_idx = -1
+        for i, line in enumerate(lines):
+            if line.strip().startswith('BEST_SCORE:'):
+                best_score_line_idx = i
+                break
+                
+        if best_score_line_idx != -1:
+            lines[best_score_line_idx] = f"BEST_SCORE:{new_score}\n"
+        else:
+            if lines[-1].strip():
+                lines.append('\n')
+            lines.append(f"BEST_SCORE:{new_score}\n")
+            
+        with open(filepath, 'w') as f:
+            f.writelines(lines)
+    except Exception as e:
+        print(f"Error saving best score: {e}")
+
+def load_all_levels(level_dir: str) -> list[dict]:
+    # Load all levels from individual level files in the directory.
+    import re
     
     levels = []
-    level_blocks = content.split('[LEVEL]')
+    if not os.path.exists(level_dir):
+        return levels
+
+    # Find all level files matching pattern level<number>.txt
+    files = []
+    for filename in os.listdir(level_dir):
+        match = re.match(r'level(\d+)\.txt', filename)
+        if match:
+            files.append((int(match.group(1)), filename))
     
-    for block in level_blocks:
-        lines = [line.strip() for line in block.strip().split('\n') if line.strip()]
-        if not lines:
-            continue
-        
-        # Parse board
-        board = []
-        i = 0
-        while i < len(lines) and all(c in '012' for c in lines[i]):
-            board.append(lines[i])
-            i += 1
-        
-        # Parse player and box positions
-        if i < len(lines):
-            player_pos = tuple(map(int, lines[i].split(',')))
-            boxes_pos = [tuple(map(int, pos.split(','))) for pos in lines[i + 1].split(';')]
-            levels.append((board, player_pos, boxes_pos))
+    # Sort by level number
+    files.sort()
+    
+    for _, filename in files:
+        path = os.path.join(level_dir, filename)
+        try:
+            with open(path, 'r') as f:
+                content = f.read().strip()
+            
+            if not content:
+                continue
+
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            if not lines:
+                continue
+            
+            # Parse board
+            board = []
+            i = 0
+            # Read until we hit a comma (coordinate line)
+            while i < len(lines) and ',' not in lines[i]:
+                board.append(lines[i])
+                i += 1
+            
+            # Parse player and box positions
+            if i < len(lines):
+                player_pos = tuple(map(int, lines[i].split(',')))
+                if i + 1 < len(lines):
+                    # Remove trailing dot if present
+                    boxes_line = lines[i + 1].rstrip('.')
+                    boxes_pos = [tuple(map(int, pos.split(','))) for pos in boxes_line.split(';')]
+                    
+                    # Parse BEST_SCORE
+                    best_score = 0
+                    for line in lines[i+2:]: # Look in remaining lines
+                        if line.startswith('BEST_SCORE:'):
+                            try:
+                                best_score = int(line.split(':')[1].rstrip('.'))
+                            except ValueError:
+                                best_score = 0
+                    
+                    levels.append({
+                        'board': board,
+                        'player': player_pos,
+                        'boxes': boxes_pos,
+                        'best_score': best_score,
+                        'file_path': path
+                    })
+                    
+        except Exception as e:
+            print(f"Error loading {filename}: {e}")
     
     return levels
 
@@ -434,7 +513,7 @@ def load_all_levels(config_file: str) -> list[tuple]:
 
 if __name__ == '__main__':
     print("Loading levels...")
-    levels = load_all_levels('level/level.txt')
+    levels = load_all_levels('level')
     current_level = 0
     
     print("\n" + "=" * 50)
@@ -448,18 +527,23 @@ if __name__ == '__main__':
     print("=" * 50)
     
     while current_level < len(levels):
-        board, player_pos, boxes_pos = levels[current_level]
+        level_data = levels[current_level]
+        board = level_data['board']
+        player_pos = level_data['player']
+        boxes_pos = level_data['boxes']
+        best_score = level_data['best_score']
+        level_path = level_data['file_path']
         
         print(f"\n{'=' * 50}")
         print(f"Level {current_level + 1} / {len(levels)}")
         print(f"{'=' * 50}")
         
         solver = SokobanSolver(board, player_pos, boxes_pos)
-        game = SokobanGame(solver)
+        game = SokobanGame(solver, best_score)
         
         # Start with manual play mode
         print("Starting in MANUAL mode...")
-        result, current_player_pos, current_boxes_pos = game.play_manual(current_level + 1, len(levels))
+        result, current_player_pos, current_boxes_pos = game.play_manual(current_level + 1, len(levels), level_path)
         
         if result == 'next':
             # Level completed manually
