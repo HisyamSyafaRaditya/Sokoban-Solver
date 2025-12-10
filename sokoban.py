@@ -26,6 +26,7 @@ class Button:
         self.color = color
         self.hover_color = hover_color
         self.font = pygame.font.Font(None, 36)
+        self.small_font = pygame.font.Font(None, 24)
 
     def draw(self, screen):
         mouse_pos = pygame.mouse.get_pos()
@@ -34,9 +35,23 @@ class Button:
         pygame.draw.rect(screen, color, self.rect, border_radius=10)
         pygame.draw.rect(screen, WHITE, self.rect, 2, border_radius=10)
         
-        text_surf = self.font.render(self.text, True, BLACK if color == WHITE else WHITE)
-        text_rect = text_surf.get_rect(center=self.rect.center)
-        screen.blit(text_surf, text_rect)
+        # Handle multiline text
+        lines = self.text.split('\n')
+        
+        # Calculate total height with different fonts
+        total_height = 0
+        fonts = [self.font if i == 0 else self.small_font for i in range(len(lines))]
+        for font in fonts:
+            total_height += font.get_height()
+            
+        current_y = self.rect.center[1] - total_height // 2
+        
+        for i, line in enumerate(lines):
+            font = fonts[i]
+            text_surf = font.render(line, True, BLACK if color == WHITE else WHITE)
+            text_rect = text_surf.get_rect(center=(self.rect.center[0], current_y + font.get_height() // 2))
+            screen.blit(text_surf, text_rect)
+            current_y += font.get_height()
 
     def is_clicked(self, pos):
         return self.rect.collidepoint(pos)
@@ -47,16 +62,18 @@ class SokobanGame:
     Sokoban game with manual play mode and auto-solve visualization.
     """
 
-    def __init__(self, solver: SokobanSolver, best_score: int = 0):
+    def __init__(self, solver: SokobanSolver = None, best_score: int = 0):
         self.solver = solver
         self.assets = {}
         self.buttons = []
         self.best_score = best_score
 
+
     def _init_ui(self):
         self.buttons = [
             Button(50, 200, 200, 50, "Restart (R)", "restart", color=(100, 100, 100), hover_color=(150, 150, 150)),
-            Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(0, 100, 200), hover_color=(50, 150, 250))
+            Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(0, 100, 200), hover_color=(50, 150, 250)),
+            Button(50, 340, 200, 50, "Exit Level", "exit", color=(200, 50, 50), hover_color=(250, 100, 100))
         ]
 
     def _load_assets(self, tile_size: int) -> dict:
@@ -267,6 +284,9 @@ class SokobanGame:
                                 elif button.action_id == 'auto':
                                     running = False
                                     result = 'auto'
+                                elif button.action_id == 'exit':
+                                    running = False
+                                    result = 'quit'
 
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -507,6 +527,79 @@ def load_all_levels(level_dir: str) -> list[dict]:
     return levels
 
 
+def run_main_menu(levels: list[dict]) -> int:
+    # Run the main menu loop. Returns the index of the selected level or -1 to quit.
+    if not pygame.get_init():
+        pygame.init()
+        
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption('Sokoban Solver - Main Menu')
+    clock = pygame.time.Clock()
+    
+    # Create buttons for each level
+    level_buttons = []
+    button_width = 250
+    button_height = 80
+    start_x = 100
+    start_y = 200
+    gap_x = 20
+    gap_y = 20
+    
+    cols = 4
+    
+    for i, level in enumerate(levels):
+        row = i // cols
+        col = i % cols
+        x = start_x + col * (button_width + gap_x)
+        y = start_y + row * (button_height + gap_y)
+        
+        # Custom button rendering for multiline text
+        btn_text = f"LEVEL {i+1}"
+        if level['best_score'] > 0:
+            btn_text += f"\nBest: {level['best_score']} Moves"
+        else:
+            btn_text += f"\nBest: -"
+            
+        level_buttons.append(Button(x, y, button_width, button_height, btn_text, i, color=(50, 50, 50), hover_color=(100, 100, 255)))
+
+    # Add Exit Game button
+    exit_btn = Button(SCREEN_WIDTH // 2 - 100, 600, 200, 60, "Exit Game", -1, color=(200, 50, 50), hover_color=(250, 100, 100))
+    level_buttons.append(exit_btn)
+
+    running = True
+    while running:
+        screen.fill(SSS) # Use background constant
+        
+        # Draw Title
+        font = pygame.font.Font(None, 80)
+        title_text = font.render("SOKOBAN SOLVER", True, WHITE)
+        title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, 80))
+        screen.blit(title_text, title_rect)
+        
+        # Draw Buttons
+        mouse_pos = pygame.mouse.get_pos()
+        for btn in level_buttons:
+            btn.draw(screen)
+            
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return -1
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return -1
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    for btn in level_buttons:
+                        if btn.is_clicked(event.pos):
+                            return btn.action_id
+                            
+        clock.tick(30)
+        
+    return -1
+
+
 # ============================================================================
 # Main Program
 # ============================================================================
@@ -514,19 +607,18 @@ def load_all_levels(level_dir: str) -> list[dict]:
 if __name__ == '__main__':
     print("Loading levels...")
     levels = load_all_levels('level')
-    current_level = 0
     
-    print("\n" + "=" * 50)
-    print("SOKOBAN SOLVER")
-    print("=" * 50)
-    print("Controls:")
-    print("  WASD  - Move player (Manual mode)")
-    print("  SPACE - Switch to Auto-Solve mode")
-    print("  R     - Restart current level")
-    print("  ESC   - Quit game")
-    print("=" * 50)
-    
-    while current_level < len(levels):
+    while True:
+        # Reload levels to get fresh best scores if updated
+        levels = load_all_levels('level')
+        
+        choice = run_main_menu(levels)
+        
+        if choice == -1:
+            print("Exiting game...")
+            break
+            
+        current_level = choice
         level_data = levels[current_level]
         board = level_data['board']
         player_pos = level_data['player']
@@ -535,7 +627,7 @@ if __name__ == '__main__':
         level_path = level_data['file_path']
         
         print(f"\n{'=' * 50}")
-        print(f"Level {current_level + 1} / {len(levels)}")
+        print(f"Playing Level {current_level + 1}...")
         print(f"{'=' * 50}")
         
         solver = SokobanSolver(board, player_pos, boxes_pos)
@@ -546,19 +638,12 @@ if __name__ == '__main__':
         result, current_player_pos, current_boxes_pos = game.play_manual(current_level + 1, len(levels), level_path)
         
         if result == 'next':
-            # Level completed manually
-            print("Level completed manually!")
-            current_level += 1
+            print("Level completed! Returning to menu...")
+            pygame.time.wait(1000)
             
-            if current_level < len(levels):
-                print(f"\nProceeding to Level {current_level + 1}...")
-            else:
-                print("\nAll levels completed! Congratulations!!!")
-        
         elif result == 'auto':
             # User requested auto-solve from current state
             print("\nSwitching to AUTO-SOLVE mode...")
-            print(f"Solving from current position...")
             
             # Create new solver with current state
             auto_solver = SokobanSolver(board, current_player_pos, current_boxes_pos)
@@ -568,29 +653,18 @@ if __name__ == '__main__':
                 # Display solution statistics
                 print(f"Solution found in {auto_solver.time_used:.3f}s")
                 print(f"Step needed: {len(solution)} step(s)")
-                print(f"Moves: {solution}")
-                print(f"Expanded nodes: {auto_solver.expanded_nodes_count}")
-                print(f"Visited nodes: {auto_solver.visited_nodes_count}")
                 
                 # Visualize solution from current state
                 auto_game = SokobanGame(auto_solver)
                 auto_game.visualize_solution(solution, animation_speed=0.3)
-                current_level += 1
-                
-                if current_level < len(levels):
-                    print(f"\nProceeding to Level {current_level + 1}...")
-                else:
-                    print("\nAll levels completed!")
+                print("Auto-solve complete. Returning to menu...")
             else:
                 print("No solution found from current position.")
-                retry = input("Retry this level? (y/n): ").strip().lower()
-                if retry != 'y':
-                    break
+                pygame.time.wait(2000)
         
-        else:
-            # User quit
-            print("\nThanks for playing!")
-            break
+        # If result is 'quit', it just breaks the inner game loop and returns here,
+        # which loops back to the main menu. Matches "ESC -> Menu" behavior.
+
     
     # Cleanup
     if pygame.get_init():
