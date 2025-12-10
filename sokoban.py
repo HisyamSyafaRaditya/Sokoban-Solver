@@ -572,7 +572,7 @@ def run_main_menu(levels: list[dict]) -> int:
         
         # Draw Title
         font = pygame.font.Font(None, 80)
-        title_text = font.render("SOKOBAN SOLVER", True, WHITE)
+        title_text = font.render("SOKOBAN GAME", True, WHITE)
         title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, 80))
         screen.blit(title_text, title_rect)
         
