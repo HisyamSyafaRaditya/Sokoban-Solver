@@ -13,6 +13,32 @@ BLUE = (0, 0, 255)
 
 # Game constants
 TILE_SIZE = 50
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+
+
+class Button:
+    def __init__(self, x, y, width, height, text, action_id, color=GRAY, hover_color=WHITE):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.action_id = action_id
+        self.color = color
+        self.hover_color = hover_color
+        self.font = pygame.font.Font(None, 36)
+
+    def draw(self, screen):
+        mouse_pos = pygame.mouse.get_pos()
+        color = self.hover_color if self.rect.collidepoint(mouse_pos) else self.color
+        
+        pygame.draw.rect(screen, color, self.rect, border_radius=10)
+        pygame.draw.rect(screen, WHITE, self.rect, 2, border_radius=10)
+        
+        text_surf = self.font.render(self.text, True, BLACK if color == WHITE else WHITE)
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        screen.blit(text_surf, text_rect)
+
+    def is_clicked(self, pos):
+        return self.rect.collidepoint(pos)
 
 
 class SokobanGame:
@@ -23,6 +49,13 @@ class SokobanGame:
     def __init__(self, solver: SokobanSolver):
         self.solver = solver
         self.assets = {}
+        self.buttons = []
+
+    def _init_ui(self):
+        self.buttons = [
+            Button(50, 200, 200, 50, "Restart (R)", "restart", color=(100, 100, 100), hover_color=(150, 150, 150)),
+            Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(0, 100, 200), hover_color=(50, 150, 250))
+        ]
 
     def _load_assets(self, tile_size: int) -> dict:
         # Load game assets (images) from the images directory.
@@ -58,21 +91,36 @@ class SokobanGame:
 
 
     def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
-                    boxes_pos: list[tuple[int, int]]) -> None:
+                    boxes_pos: list[tuple[int, int]], moves_count: int = 0) -> None:
         # Draw the game board with current state.
         screen.fill(BLACK)
+
+        # Calculate offsets to center the board
+        board_width = self.solver.width * TILE_SIZE
+        board_height = self.solver.height * TILE_SIZE
+        offset_x = (SCREEN_WIDTH - board_width) // 2
+        offset_y = (SCREEN_HEIGHT - board_height) // 2
 
         # Draw board tiles
         for row in range(self.solver.height):
             for col in range(self.solver.width):
-                rect = pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                rect = pygame.Rect(col * TILE_SIZE + offset_x, row * TILE_SIZE + offset_y, TILE_SIZE, TILE_SIZE)
                 self._draw_tile(screen, rect, row, col)
 
         # Draw boxes
-        self._draw_boxes(screen, boxes_pos)
+        self._draw_boxes(screen, boxes_pos, offset_x, offset_y)
 
         # Draw player
-        self._draw_player(screen, player_pos)
+        self._draw_player(screen, player_pos, offset_x, offset_y)
+
+        # Draw UI buttons
+        for button in self.buttons:
+            button.draw(screen)
+
+        # Draw move counter
+        font = pygame.font.Font(None, 48)
+        text = font.render(f"Moves: {moves_count}", True, WHITE)
+        screen.blit(text, (50, 100))
 
         pygame.display.flip()
 
@@ -99,10 +147,10 @@ class SokobanGame:
             else:
                 pygame.draw.rect(screen, WHITE, rect)
 
-    def _draw_boxes(self, screen: pygame.Surface, boxes_pos: list[tuple[int, int]]) -> None:
+    def _draw_boxes(self, screen: pygame.Surface, boxes_pos: list[tuple[int, int]], offset_x: int, offset_y: int) -> None:
         # Draw all boxes on the board.
         for box_pos in boxes_pos:
-            box_rect = pygame.Rect(box_pos[1] * TILE_SIZE, box_pos[0] * TILE_SIZE, 
+            box_rect = pygame.Rect(box_pos[1] * TILE_SIZE + offset_x, box_pos[0] * TILE_SIZE + offset_y, 
                                    TILE_SIZE, TILE_SIZE)
             on_target = self.solver.board[box_pos[0]][box_pos[1]] == GOAL
             
@@ -114,9 +162,9 @@ class SokobanGame:
                 color = GREEN if on_target else YELLOW
                 pygame.draw.rect(screen, color, box_rect)
 
-    def _draw_player(self, screen: pygame.Surface, player_pos: tuple[int, int]) -> None:
+    def _draw_player(self, screen: pygame.Surface, player_pos: tuple[int, int], offset_x: int, offset_y: int) -> None:
         # Draw the player on the board with animation.
-        player_rect = pygame.Rect(player_pos[1] * TILE_SIZE, player_pos[0] * TILE_SIZE, 
+        player_rect = pygame.Rect(player_pos[1] * TILE_SIZE + offset_x, player_pos[0] * TILE_SIZE + offset_y, 
                                   TILE_SIZE, TILE_SIZE)
         
         player_frames = self.assets.get('player_frames', [])
@@ -170,7 +218,7 @@ class SokobanGame:
             pygame.init()
 
         # Create display and load assets
-        screen = pygame.display.set_mode((self.solver.width * TILE_SIZE, self.solver.height * TILE_SIZE))
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(f'Sokoban - Level {level_num}/{total_levels}')
         
         try:
@@ -178,15 +226,19 @@ class SokobanGame:
         except Exception:
             self.assets = {}
 
+        # Initialize UI
+        self._init_ui()
+
         # Initialize game state
         current_pos = self.solver.init_player_pos
         current_boxes = list(self.solver.init_boxes_pos)
+        moves_count = 0
         clock = pygame.time.Clock()
         running = True
         result = 'quit'
 
         # Draw initial state
-        self._draw_board(screen, current_pos, current_boxes)
+        self._draw_board(screen, current_pos, current_boxes, moves_count)
         pygame.display.flip()
 
         # Main game loop
@@ -196,6 +248,18 @@ class SokobanGame:
                     running = False
                     result = 'quit'
                 
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left click
+                        for button in self.buttons:
+                            if button.is_clicked(event.pos):
+                                if button.action_id == 'restart':
+                                    current_pos = self.solver.init_player_pos
+                                    current_boxes = list(self.solver.init_boxes_pos)
+                                    moves_count = 0
+                                elif button.action_id == 'auto':
+                                    running = False
+                                    result = 'auto'
+
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         running = False
@@ -205,6 +269,7 @@ class SokobanGame:
                         # Restart level
                         current_pos = self.solver.init_player_pos
                         current_boxes = list(self.solver.init_boxes_pos)
+                        moves_count = 0
                     
                     elif event.key == pygame.K_SPACE:
                         # Switch to auto-solve mode with current state
@@ -213,24 +278,28 @@ class SokobanGame:
                     
                     # Handle WASD movement
                     elif event.key == pygame.K_w:
-                        current_pos, current_boxes, _ = self._handle_manual_move('U', current_pos, current_boxes)
+                        current_pos, current_boxes, moved = self._handle_manual_move('U', current_pos, current_boxes)
+                        if moved: moves_count += 1
                     elif event.key == pygame.K_a:
-                        current_pos, current_boxes, _ = self._handle_manual_move('L', current_pos, current_boxes)
+                        current_pos, current_boxes, moved = self._handle_manual_move('L', current_pos, current_boxes)
+                        if moved: moves_count += 1
                     elif event.key == pygame.K_s:
-                        current_pos, current_boxes, _ = self._handle_manual_move('D', current_pos, current_boxes)
+                        current_pos, current_boxes, moved = self._handle_manual_move('D', current_pos, current_boxes)
+                        if moved: moves_count += 1
                     elif event.key == pygame.K_d:
-                        current_pos, current_boxes, _ = self._handle_manual_move('R', current_pos, current_boxes)
+                        current_pos, current_boxes, moved = self._handle_manual_move('R', current_pos, current_boxes)
+                        if moved: moves_count += 1
                     
                     # Check win condition
                     if all(self.solver.board[box[0]][box[1]] == GOAL for box in current_boxes):
                         # Draw winning state
-                        self._draw_board(screen, current_pos, current_boxes)
+                        self._draw_board(screen, current_pos, current_boxes, moves_count)
                         
                         # Show win message with background
                         try:
                             font = pygame.font.Font(None, 72)
                             win_text = font.render("LEVEL COMPLETE!", True, GREEN)
-                            text_rect = win_text.get_rect(center=(self.solver.width * TILE_SIZE // 2, self.solver.height * TILE_SIZE // 2))
+                            text_rect = win_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
                             
                             # Draw semi-transparent background box
                             padding = 20
@@ -256,7 +325,7 @@ class SokobanGame:
                         result = 'next'
             
             # Redraw screen
-            self._draw_board(screen, current_pos, current_boxes)
+            self._draw_board(screen, current_pos, current_boxes, moves_count)
             pygame.display.flip()
             clock.tick(30)
 
@@ -272,7 +341,7 @@ class SokobanGame:
             pygame.init()
 
         # Create display and load assets
-        screen = pygame.display.set_mode((self.solver.width * TILE_SIZE, self.solver.height * TILE_SIZE))
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption('Sokoban Solver Animation')
         
         try:
