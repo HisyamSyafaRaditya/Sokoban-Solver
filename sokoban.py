@@ -50,32 +50,40 @@ class Button:
         self.shadow_offset = 4
         self.is_hovered = False
 
-    def draw(self, screen):
+    def draw(self, screen, offset=(0, 0)):
+        # Calculate drawn absolute position
+        abs_x = self.rect.x - offset[0]
+        abs_y = self.rect.y - offset[1]
+        
+        # Check if button is effectively visible (optional optimization, keeping simple for now)
+        # Mouse interaction check needs to account for offset
         mouse_pos = pygame.mouse.get_pos()
-        self.is_hovered = self.rect.collidepoint(mouse_pos)
+        # Create a transient rect for collision detection at the drawn position
+        interact_rect = pygame.Rect(abs_x, abs_y, self.rect.width, self.rect.height)
+        
+        self.is_hovered = interact_rect.collidepoint(mouse_pos)
         
         color = self.hover_color if self.is_hovered else self.base_color
         
         # Draw Shadow
-        shadow_rect = self.rect.copy()
+        shadow_rect = interact_rect.copy()
         shadow_rect.x += self.shadow_offset
         shadow_rect.y += self.shadow_offset
-        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=12) # Semi-transparent shadow
+        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=12) 
 
         # Draw Button Body
-        # If hovered, slightly move button up/left to simulate press/lift or just standard highlight
-        draw_rect = self.rect.copy()
+        draw_rect = interact_rect.copy()
         if self.is_hovered:
             draw_rect.x -= 2
             draw_rect.y -= 2
         
         pygame.draw.rect(screen, color, draw_rect, border_radius=12)
-        pygame.draw.rect(screen, (255, 255, 255, 50), draw_rect, 2, border_radius=12) # Subtle border
+        pygame.draw.rect(screen, (255, 255, 255, 50), draw_rect, 2, border_radius=12) 
         
         # Handle multiline text
         lines = self.text.split('\n')
         
-        # Calculate total height with different fonts
+        # Calculate total height
         total_height = 0
         fonts = [self.font if i == 0 else self.small_font for i in range(len(lines))]
         for font in fonts:
@@ -90,9 +98,12 @@ class Button:
             screen.blit(text_surf, text_rect)
             current_y += font.get_height()
 
-    def is_clicked(self, pos):
-        # Check against the drawn position (which might be shifted if hovered)
+    def is_clicked(self, pos, offset=(0, 0)):
+        # Check against the drawn position
         check_rect = self.rect.copy()
+        check_rect.x -= offset[0]
+        check_rect.y -= offset[1]
+        
         if self.is_hovered:
             check_rect.x -= 2
             check_rect.y -= 2
@@ -613,15 +624,25 @@ def run_main_menu(levels: list[dict]) -> int:
     # Grid layout calculations
     cols = 4
     start_x = (SCREEN_WIDTH - (cols * button_width + (cols - 1) * 20)) // 2
-    start_y = 200
+    
+    # We'll treat start_y as relative to the top of the SCROLLABLE CONTENT AREA
+    # The Scrollable Area will start at `viewport_y`
+    viewport_y = 180 
+    viewport_height = SCREEN_HEIGHT - viewport_y - 120 # Leave room for footer
+    
+    start_y_relative = 20 # Padding inside scroll container
     gap_x = 20
     gap_y = 20
+    
+    # Generate buttons
+    total_rows = (len(levels) + cols - 1) // cols
+    content_height = start_y_relative + total_rows * (button_height + gap_y)
     
     for i, level in enumerate(levels):
         row = i // cols
         col = i % cols
         x = start_x + col * (button_width + gap_x)
-        y = start_y + row * (button_height + gap_y)
+        y = start_y_relative + row * (button_height + gap_y) # Y is relative to content top
         
         # Custom button rendering for multiline text
         btn_text = f"LEVEL {i+1}"
@@ -633,20 +654,33 @@ def run_main_menu(levels: list[dict]) -> int:
         # Alternate colors for visual interest
         color = (41, 128, 185) if level['best_score'] > 0 else (52, 73, 94) # Blue if completed else Dark Blue
         
+        # Note: We store the RELATIVE Y position in the rect.
+        # When drawing/checking click, we will subtract scroll_y and add viewport_y.
+        # Actually, simpler: Store absolute Y as if the list was fully expanded starting at 0.
+        # Then offset = scroll_y. viewport_y will be added during Draw call?
+        # Let's keep it simple: The Scrollable Viewport is a window.
+        # Button Rects are defined relative to the Top-Left of the *Content Surface*.
+        # When we draw, we translate: Screen_Y = Viewport_Y + Button_Y - Scroll_Y
+        # So we can just use the Button logic with offset = (0, Scroll_Y - Viewport_Y)
+        
+        # To make it compatible with our Button class which expects screen coordinates mostly, 
+        # let's set the Rect to where it WOULD be if scrolled safely to 0, relative to viewport top.
         level_buttons.append(Button(x, y, button_width, button_height, btn_text, i, color=color, hover_color=(52, 152, 219)))
 
-    # Add Exit Game button
-    exit_btn = Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 100, 200, 60, "Exit Game", -1, color=(192, 57, 43), hover_color=(231, 76, 60))
-    level_buttons.append(exit_btn)
-
+    # Add Exit Game button (Fixed position, not in scroll list)
+    exit_btn = Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 90, 200, 60, "Exit Game", -1, color=(192, 57, 43), hover_color=(231, 76, 60))
+    
     running = True
     title_font = pygame.font.Font(None, 100)
     subtitle_font = pygame.font.Font(None, 40)
     
+    scroll_y = 0
+    max_scroll = max(0, content_height - viewport_height)
+    
     while running:
         draw_gradient_background(screen, (44, 62, 80), (18, 18, 18)) # Dark Blue to Black
         
-        # Draw Title with Shadow
+        # --- Draw Header (Fixed) ---
         title_text = "SOKOBAN"
         title_surf = title_font.render(title_text, True, WHITE)
         title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 80))
@@ -657,29 +691,80 @@ def run_main_menu(levels: list[dict]) -> int:
         screen.blit(shadow_surf, shadow_rect)
         screen.blit(title_surf, title_rect)
         
-        # Subtitle
         sub_text = subtitle_font.render("Select a Level", True, (200, 200, 200))
         sub_rect = sub_text.get_rect(center=(SCREEN_WIDTH // 2, 140))
         screen.blit(sub_text, sub_rect)
         
-        # Draw Buttons
+        # --- Draw Scrollable Content ---
+        # Define the viewport Rect
+        viewport_rect = pygame.Rect(0, viewport_y, SCREEN_WIDTH, viewport_height)
+        
+        # Set clipping region
+        screen.set_clip(viewport_rect)
+        
+        # Offset for drawing: We need to shift everything UP by scroll_y, and DOWN by viewport_y
+        # Button Y is relative to 0. 
+        # Screen Y = Button Y + viewport_y - scroll_y.
+        # Our Button.draw takes 'offset'. 
+        # abs_y = self.rect.y - offset[1].
+        # We want abs_y = Button Y + viewport_y - scroll_y
+        # So: Button Y - offset[1] = Button Y + viewport_y - scroll_y
+        # offset[1] = scroll_y - viewport_y
+        draw_offset = (0, scroll_y - viewport_y)
+        
         mouse_pos = pygame.mouse.get_pos()
+        
         for btn in level_buttons:
-            btn.draw(screen)
+            # Optimization: Only draw if visible
+            # Button y range: [btn.rect.y, btn.rect.bottom] relative to content top
+            # Visible range in content coords: [scroll_y, scroll_y + viewport_height]
+            if btn.rect.bottom > scroll_y and btn.rect.y < scroll_y + viewport_height:
+                btn.draw(screen, offset=draw_offset)
+        
+        # Draw Scrollbar (optional but helpful)
+        if max_scroll > 0:
+            scrollbar_width = 10
+            scrollbar_height = int(viewport_height * (viewport_height / content_height))
+            scrollbar_x = SCREEN_WIDTH - 20
+            # Calculate scrollbar position
+            scroll_ratio = scroll_y / max_scroll
+            scrollbar_y = viewport_y + int(scroll_ratio * (viewport_height - scrollbar_height))
+            
+            pygame.draw.rect(screen, (100, 100, 100), (scrollbar_x, viewport_y, scrollbar_width, viewport_height), border_radius=5)
+            pygame.draw.rect(screen, (200, 200, 200), (scrollbar_x, scrollbar_y, scrollbar_width, scrollbar_height), border_radius=5)
+
+        # Unset clip to draw footer
+        screen.set_clip(None)
+        
+        # --- Draw Footer (Fixed) ---
+        exit_btn.draw(screen)
             
         pygame.display.flip()
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return -1
-            if event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return -1
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            
+            elif event.type == pygame.MOUSEWHEEL:
+                scroll_y -= event.y * 30 # Scroll speed
+                scroll_y = max(0, min(scroll_y, max_scroll))
+                
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
-                    for btn in level_buttons:
-                        if btn.is_clicked(event.pos):
-                            return btn.action_id
+                    # Check Exit Button
+                    if exit_btn.is_clicked(event.pos):
+                        return exit_btn.action_id
+                    
+                    # Check Level Buttons
+                    # Must be within viewport to be clickable
+                    if viewport_rect.collidepoint(event.pos):
+                        for btn in level_buttons:
+                            # Use the same offset: scroll_y - viewport_y
+                            if btn.is_clicked(event.pos, offset=draw_offset):
+                                return btn.action_id
                             
         clock.tick(30)
         
