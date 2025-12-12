@@ -2,15 +2,22 @@ import pygame
 import os
 from solver import SokobanSolver, DIRECTIONS, WALL, GOAL
 
-# Color constants
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-BROWN = (139, 69, 19)
-GRAY = (128, 128, 128)
-GREEN = (0, 128, 0)
-YELLOW = (255, 255, 0)
-BLUE = (0, 0, 255)
-SSS = (26, 26, 26)
+# Modern Color Palette
+BLACK = (18, 18, 18)
+WHITE = (240, 240, 240)
+BROWN = (101, 67, 33)
+GRAY = (40, 40, 40)
+GREEN = (46, 204, 113)    # Emerald Green
+YELLOW = (241, 196, 15)   # Sunflower Yellow
+BLUE = (52, 152, 219)     # Peter River Blue
+RED = (231, 76, 60)       # Alizarin Red
+DARK_BLUE = (44, 62, 80)  # Midnight Blue
+ACCENT = (155, 89, 182)   # Amethyst Purple
+
+# UI Constants
+BUTTON_COLOR = (52, 73, 94)
+BUTTON_HOVER = (41, 128, 185)
+TEXT_COLOR = (236, 240, 241)
 
 # Game constants
 TILE_SIZE = 50
@@ -18,22 +25,52 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 
 
+def draw_gradient_background(screen, top_color, bottom_color):
+    """Draws a vertical gradient background."""
+    height = screen.get_height()
+    for i in range(height):
+        # Linear interpolation
+        alpha = i / height
+        r = int(top_color[0] * (1 - alpha) + bottom_color[0] * alpha)
+        g = int(top_color[1] * (1 - alpha) + bottom_color[1] * alpha)
+        b = int(top_color[2] * (1 - alpha) + bottom_color[2] * alpha)
+        pygame.draw.line(screen, (r, g, b), (0, i), (screen.get_width(), i))
+
+
 class Button:
-    def __init__(self, x, y, width, height, text, action_id, color=GRAY, hover_color=WHITE):
+    def __init__(self, x, y, width, height, text, action_id, color=BUTTON_COLOR, hover_color=BUTTON_HOVER, text_color=TEXT_COLOR):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.action_id = action_id
-        self.color = color
+        self.base_color = color
         self.hover_color = hover_color
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 24)
+        self.text_color = text_color
+        self.font = pygame.font.Font(None, 40) # Larger font
+        self.small_font = pygame.font.Font(None, 28)
+        self.shadow_offset = 4
+        self.is_hovered = False
 
     def draw(self, screen):
         mouse_pos = pygame.mouse.get_pos()
-        color = self.hover_color if self.rect.collidepoint(mouse_pos) else self.color
+        self.is_hovered = self.rect.collidepoint(mouse_pos)
         
-        pygame.draw.rect(screen, color, self.rect, border_radius=10)
-        pygame.draw.rect(screen, WHITE, self.rect, 2, border_radius=10)
+        color = self.hover_color if self.is_hovered else self.base_color
+        
+        # Draw Shadow
+        shadow_rect = self.rect.copy()
+        shadow_rect.x += self.shadow_offset
+        shadow_rect.y += self.shadow_offset
+        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=12) # Semi-transparent shadow
+
+        # Draw Button Body
+        # If hovered, slightly move button up/left to simulate press/lift or just standard highlight
+        draw_rect = self.rect.copy()
+        if self.is_hovered:
+            draw_rect.x -= 2
+            draw_rect.y -= 2
+        
+        pygame.draw.rect(screen, color, draw_rect, border_radius=12)
+        pygame.draw.rect(screen, (255, 255, 255, 50), draw_rect, 2, border_radius=12) # Subtle border
         
         # Handle multiline text
         lines = self.text.split('\n')
@@ -44,17 +81,22 @@ class Button:
         for font in fonts:
             total_height += font.get_height()
             
-        current_y = self.rect.center[1] - total_height // 2
+        current_y = draw_rect.center[1] - total_height // 2
         
         for i, line in enumerate(lines):
             font = fonts[i]
-            text_surf = font.render(line, True, BLACK if color == WHITE else WHITE)
-            text_rect = text_surf.get_rect(center=(self.rect.center[0], current_y + font.get_height() // 2))
+            text_surf = font.render(line, True, self.text_color)
+            text_rect = text_surf.get_rect(center=(draw_rect.center[0], current_y + font.get_height() // 2))
             screen.blit(text_surf, text_rect)
             current_y += font.get_height()
 
     def is_clicked(self, pos):
-        return self.rect.collidepoint(pos)
+        # Check against the drawn position (which might be shifted if hovered)
+        check_rect = self.rect.copy()
+        if self.is_hovered:
+            check_rect.x -= 2
+            check_rect.y -= 2
+        return check_rect.collidepoint(pos)
 
 
 class SokobanGame:
@@ -70,10 +112,11 @@ class SokobanGame:
 
 
     def _init_ui(self):
+        # Modern styled buttons for in-game
         self.buttons = [
-            Button(50, 200, 200, 50, "Restart (R)", "restart", color=(100, 100, 100), hover_color=(150, 150, 150)),
-            Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(0, 100, 200), hover_color=(50, 150, 250)),
-            Button(50, 340, 200, 50, "Exit Level", "exit", color=(200, 50, 50), hover_color=(250, 100, 100))
+            Button(50, 200, 200, 50, "Restart (R)", "restart", color=(52, 73, 94), hover_color=(41, 128, 185)),
+            Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(39, 174, 96), hover_color=(46, 204, 113)), # Green
+            Button(50, 340, 200, 50, "Exit Level", "exit", color=(192, 57, 43), hover_color=(231, 76, 60))  # Red
         ]
 
     def _load_assets(self, tile_size: int) -> dict:
@@ -112,13 +155,18 @@ class SokobanGame:
     def _draw_board(self, screen: pygame.Surface, player_pos: tuple[int, int], 
                     boxes_pos: list[tuple[int, int]], moves_count: int = 0) -> None:
         # Draw the game board with current state.
-        screen.fill(SSS)
+        draw_gradient_background(screen, BLACK, DARK_BLUE)
 
         # Calculate offsets to center the board
         board_width = self.solver.width * TILE_SIZE
         board_height = self.solver.height * TILE_SIZE
         offset_x = (SCREEN_WIDTH - board_width) // 2
         offset_y = (SCREEN_HEIGHT - board_height) // 2
+
+        # Draw decorative border around board
+        border_rect = pygame.Rect(offset_x - 10, offset_y - 10, board_width + 20, board_height + 20)
+        pygame.draw.rect(screen, (255, 255, 255, 30), border_rect, border_radius=5)
+        pygame.draw.rect(screen, WHITE, border_rect, 2, border_radius=5)
 
         # Draw board tiles
         for row in range(self.solver.height):
@@ -136,16 +184,21 @@ class SokobanGame:
         for button in self.buttons:
             button.draw(screen)
 
+        # Draw sidebar info panel
+        panel_rect = pygame.Rect(50, 50, 200, 120)
+        pygame.draw.rect(screen, (0, 0, 0, 150), panel_rect, border_radius=10)
+        pygame.draw.rect(screen, WHITE, panel_rect, 1, border_radius=10)
+
         # Draw move counter
         font = pygame.font.Font(None, 48)
         text = font.render(f"Moves: {moves_count}", True, WHITE)
-        screen.blit(text, (50, 100))
+        screen.blit(text, (65, 70))
         
         # Draw Best Score
-        if self.best_score > 0:
-            best_text = f"Best: {self.best_score}"
-            text_best = font.render(best_text, True, WHITE)
-            screen.blit(text_best, (SCREEN_WIDTH - 250, 100))
+        # if self.best_score > 0:
+        best_text_str = f"Best: {self.best_score}" if self.best_score > 0 else "Best: -"
+        text_best = pygame.font.Font(None, 36).render(best_text_str, True, YELLOW)
+        screen.blit(text_best, (65, 120))
 
         pygame.display.flip()
 
@@ -324,36 +377,52 @@ class SokobanGame:
                         self._draw_board(screen, current_pos, current_boxes, moves_count)
                         
                         # Show win message with background
+                        # Show win message with modern overlay
                         try:
-                            font = pygame.font.Font(None, 72)
-                            win_text = font.render("LEVEL COMPLETE!", True, GREEN)
-                            text_rect = win_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                            # Dim background
+                            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                            overlay.fill((0, 0, 0, 180)) # Darker fade
+                            screen.blit(overlay, (0, 0))
+                            
+                            # Draw panel
+                            panel_w, panel_h = 600, 300
+                            panel_x = (SCREEN_WIDTH - panel_w) // 2
+                            panel_y = (SCREEN_HEIGHT - panel_h) // 2
+                            panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+                            
+                            pygame.draw.rect(screen, (34, 49, 63), panel_rect, border_radius=20)
+                            pygame.draw.rect(screen, WHITE, panel_rect, 3, border_radius=20)
+                            
+                            # Calculate centers
+                            center_x = SCREEN_WIDTH // 2
+                            center_y = SCREEN_HEIGHT // 2
 
                             # Update best score
                             if level_path and (self.best_score == 0 or moves_count < self.best_score):
                                 save_best_score(level_path, moves_count)
-                                print(f"New Best Score: {moves_count}!")
                                 self.best_score = moves_count
+                                # New Record Text
+                                record_font = pygame.font.Font(None, 50)
+                                record_text = record_font.render("NEW RECORD!", True, YELLOW)
+                                record_rect = record_text.get_rect(center=(center_x, center_y))
+                                screen.blit(record_text, record_rect)
                             
-                            # Draw semi-transparent background box
-                            padding = 20
-                            bg_rect = pygame.Rect(
-                                text_rect.x - padding,
-                                text_rect.y - padding,
-                                text_rect.width + padding * 2,
-                                text_rect.height + padding * 2
-                            )
-                            bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
-                            pygame.draw.rect(bg_surface, (0, 0, 0, 200), bg_surface.get_rect(), border_radius=15)
-                            pygame.draw.rect(bg_surface, GREEN, bg_surface.get_rect(), width=3, border_radius=15)
-                            screen.blit(bg_surface, (bg_rect.x, bg_rect.y))
+                            # Level Complete Text
+                            font = pygame.font.Font(None, 80)
+                            win_text = font.render("LEVEL COMPLETE", True, GREEN)
+                            win_rect = win_text.get_rect(center=(center_x, center_y - 70))
+                            screen.blit(win_text, win_rect)
+
+                            # Continue Text
+                            small_font = pygame.font.Font(None, 40)
+                            cont_text = small_font.render("Press SPACE to Next Level", True, WHITE)
+                            cont_rect = cont_text.get_rect(center=(center_x, center_y + 80))
+                            screen.blit(cont_text, cont_rect)
                             
-                            # Draw text
-                            screen.blit(win_text, text_rect)
                             pygame.display.flip()
-                            pygame.time.wait(1500)
-                        except:
-                            pass
+                            pygame.time.wait(2000)
+                        except Exception as e:
+                            print(f"Error in victory screen: {e}")
                         
                         running = False
                         result = 'next'
@@ -538,14 +607,15 @@ def run_main_menu(levels: list[dict]) -> int:
     
     # Create buttons for each level
     level_buttons = []
-    button_width = 250
-    button_height = 80
-    start_x = 100
+    button_width = 200
+    button_height = 120
+    
+    # Grid layout calculations
+    cols = 4
+    start_x = (SCREEN_WIDTH - (cols * button_width + (cols - 1) * 20)) // 2
     start_y = 200
     gap_x = 20
     gap_y = 20
-    
-    cols = 4
     
     for i, level in enumerate(levels):
         row = i // cols
@@ -556,25 +626,41 @@ def run_main_menu(levels: list[dict]) -> int:
         # Custom button rendering for multiline text
         btn_text = f"LEVEL {i+1}"
         if level['best_score'] > 0:
-            btn_text += f"\nBest: {level['best_score']} Moves"
+            btn_text += f"\n\nBest:\n{level['best_score']} Moves"
         else:
-            btn_text += f"\nBest: -"
+            btn_text += f"\n\nBest:\n--"
             
-        level_buttons.append(Button(x, y, button_width, button_height, btn_text, i, color=(50, 50, 50), hover_color=(100, 100, 255)))
+        # Alternate colors for visual interest
+        color = (41, 128, 185) if level['best_score'] > 0 else (52, 73, 94) # Blue if completed else Dark Blue
+        
+        level_buttons.append(Button(x, y, button_width, button_height, btn_text, i, color=color, hover_color=(52, 152, 219)))
 
     # Add Exit Game button
-    exit_btn = Button(SCREEN_WIDTH // 2 - 100, 600, 200, 60, "Exit Game", -1, color=(200, 50, 50), hover_color=(250, 100, 100))
+    exit_btn = Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 100, 200, 60, "Exit Game", -1, color=(192, 57, 43), hover_color=(231, 76, 60))
     level_buttons.append(exit_btn)
 
     running = True
+    title_font = pygame.font.Font(None, 100)
+    subtitle_font = pygame.font.Font(None, 40)
+    
     while running:
-        screen.fill(SSS) # Use background constant
+        draw_gradient_background(screen, (44, 62, 80), (18, 18, 18)) # Dark Blue to Black
         
-        # Draw Title
-        font = pygame.font.Font(None, 80)
-        title_text = font.render("SOKOBAN GAME", True, WHITE)
-        title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, 80))
-        screen.blit(title_text, title_rect)
+        # Draw Title with Shadow
+        title_text = "SOKOBAN"
+        title_surf = title_font.render(title_text, True, WHITE)
+        title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 80))
+        
+        # Shadow
+        shadow_surf = title_font.render(title_text, True, (0, 0, 0))
+        shadow_rect = shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 4, 84))
+        screen.blit(shadow_surf, shadow_rect)
+        screen.blit(title_surf, title_rect)
+        
+        # Subtitle
+        sub_text = subtitle_font.render("Select a Level", True, (200, 200, 200))
+        sub_rect = sub_text.get_rect(center=(SCREEN_WIDTH // 2, 140))
+        screen.blit(sub_text, sub_rect)
         
         # Draw Buttons
         mouse_pos = pygame.mouse.get_pos()
