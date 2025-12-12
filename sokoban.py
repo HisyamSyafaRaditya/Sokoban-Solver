@@ -120,7 +120,79 @@ class SokobanGame:
         self.assets = {}
         self.buttons = []
         self.best_score = best_score
+        self.font_large = pygame.font.Font(None, 80)
+        self.font_medium = pygame.font.Font(None, 50)
+        self.font_small = pygame.font.Font(None, 40)
+        self.font_tiny = pygame.font.Font(None, 36)
 
+
+    def _wait_for_input(self):
+        """Waits for a mouse click or SPACE key press."""
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                    # We can't really quit the whole app easily from here without global state or exceptions, 
+                    # but returning will at least exit this wait loop.
+                    return 
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    waiting = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE or event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN:
+                        waiting = False
+            pygame.time.wait(50)
+
+    def _show_victory_screen(self, screen: pygame.Surface, moves_count: int = -1, is_new_record: bool = False, is_auto: bool = False):
+        """Draws the victory overlay."""
+        # Dim background
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180)) # Darker fade
+        screen.blit(overlay, (0, 0))
+        
+        # Draw panel
+        panel_w, panel_h = 600, 350 # Slightly taller for extra info
+        panel_x = (SCREEN_WIDTH - panel_w) // 2
+        panel_y = (SCREEN_HEIGHT - panel_h) // 2
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        
+        pygame.draw.rect(screen, (34, 49, 63), panel_rect, border_radius=20)
+        pygame.draw.rect(screen, WHITE, panel_rect, 3, border_radius=20)
+        
+        # Calculate centers
+        center_x = SCREEN_WIDTH // 2
+        center_y = SCREEN_HEIGHT // 2
+
+        current_y_offset = -100
+
+        # Level Complete Text
+        title_text = "LEVEL SOLVED" if is_auto else "LEVEL COMPLETE"
+        win_text = self.font_large.render(title_text, True, GREEN)
+        win_rect = win_text.get_rect(center=(center_x, center_y + current_y_offset))
+        screen.blit(win_text, win_rect)
+        
+        current_y_offset += 70
+
+        if is_new_record:
+             # New Record Text
+            record_text = self.font_medium.render("NEW RECORD!", True, YELLOW)
+            record_rect = record_text.get_rect(center=(center_x, center_y + current_y_offset))
+            screen.blit(record_text, record_rect)
+            current_y_offset += 50
+        elif moves_count > 0:
+             # Show Score
+            score_text = self.font_medium.render(f"Moves: {moves_count}", True, WHITE)
+            score_rect = score_text.get_rect(center=(center_x, center_y + current_y_offset))
+            screen.blit(score_text, score_rect)
+            current_y_offset += 50
+
+        # Continue Text
+        current_y_offset += 50
+        cont_text = self.font_small.render("Press SPACE or CLICK to Continue", True, WHITE)
+        cont_rect = cont_text.get_rect(center=(center_x, center_y + current_y_offset))
+        screen.blit(cont_text, cont_rect)
+
+        pygame.display.flip()
 
     def _init_ui(self):
         # Modern styled buttons for in-game
@@ -387,51 +459,17 @@ class SokobanGame:
                         # Draw winning state
                         self._draw_board(screen, current_pos, current_boxes, moves_count)
                         
-                        # Show win message with background
-                        # Show win message with modern overlay
+                        # Update best score
+                        is_new_record = False
+                        if level_path and (self.best_score == 0 or moves_count < self.best_score):
+                            save_best_score(level_path, moves_count)
+                            self.best_score = moves_count
+                            is_new_record = True
+                        
+                        # Show win message
                         try:
-                            # Dim background
-                            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                            overlay.fill((0, 0, 0, 180)) # Darker fade
-                            screen.blit(overlay, (0, 0))
-                            
-                            # Draw panel
-                            panel_w, panel_h = 600, 300
-                            panel_x = (SCREEN_WIDTH - panel_w) // 2
-                            panel_y = (SCREEN_HEIGHT - panel_h) // 2
-                            panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-                            
-                            pygame.draw.rect(screen, (34, 49, 63), panel_rect, border_radius=20)
-                            pygame.draw.rect(screen, WHITE, panel_rect, 3, border_radius=20)
-                            
-                            # Calculate centers
-                            center_x = SCREEN_WIDTH // 2
-                            center_y = SCREEN_HEIGHT // 2
-
-                            # Update best score
-                            if level_path and (self.best_score == 0 or moves_count < self.best_score):
-                                save_best_score(level_path, moves_count)
-                                self.best_score = moves_count
-                                # New Record Text
-                                record_font = pygame.font.Font(None, 50)
-                                record_text = record_font.render("NEW RECORD!", True, YELLOW)
-                                record_rect = record_text.get_rect(center=(center_x, center_y))
-                                screen.blit(record_text, record_rect)
-                            
-                            # Level Complete Text
-                            font = pygame.font.Font(None, 80)
-                            win_text = font.render("LEVEL COMPLETE", True, GREEN)
-                            win_rect = win_text.get_rect(center=(center_x, center_y - 70))
-                            screen.blit(win_text, win_rect)
-
-                            # Continue Text
-                            small_font = pygame.font.Font(None, 40)
-                            cont_text = small_font.render("Press SPACE to Next Level", True, WHITE)
-                            cont_rect = cont_text.get_rect(center=(center_x, center_y + 80))
-                            screen.blit(cont_text, cont_rect)
-                            
-                            pygame.display.flip()
-                            pygame.time.wait(2000)
+                            self._show_victory_screen(screen, moves_count, is_new_record=is_new_record)
+                            self._wait_for_input()
                         except Exception as e:
                             print(f"Error in victory screen: {e}")
                         
@@ -497,6 +535,7 @@ class SokobanGame:
                 current_boxes = next_boxes
 
                 # Draw updated state
+                # Draw updated state
                 self._draw_board(screen, current_pos, current_boxes)
                 pygame.time.wait(int(animation_speed * 1000))
                 step_index += 1
@@ -504,9 +543,16 @@ class SokobanGame:
                 self._draw_board(screen, current_pos, current_boxes)
                 clock.tick(10)
 
-        print("Animation complete. Window closed.")
-        if pygame.get_init():
-            pygame.quit()
+        # Show completion screen
+        if running:
+             # Ensure final state is drawn
+            self._draw_board(screen, current_pos, current_boxes)
+            self._show_victory_screen(screen, len(solution_path), is_auto=True)
+            self._wait_for_input()
+
+        print("Animation complete. Returning.")
+        # Do not quit pygame here, as we want to return to menu
+
 
 
 # ============================================================================
