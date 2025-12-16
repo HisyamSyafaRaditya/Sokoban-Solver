@@ -263,9 +263,53 @@ class SokobanGame:
         screen.blit(text, (65, 70))
         
         # Draw Best Score
-        best_text_str = f"Best: {self.best_score}" if self.best_score > 0 else "Best: -"
-        text_best = pygame.font.Font(None, 36).render(best_text_str, True, YELLOW)
-        screen.blit(text_best, (65, 120))
+        if self.best_score > 0:
+            best_text_str = f"Best: {self.best_score}"
+        else:
+            best_text_str = "Best: -"
+        
+        text_best = self.font_tiny.render(best_text_str, True, YELLOW)
+        screen.blit(text_best, (65, 120)) # Adjusted to use self.font_tiny
+
+        # Draw Controls Tutorial Panel (Right Side)
+        tutorial_w, tutorial_h = 320, 300
+        tutorial_x = SCREEN_WIDTH - 50 - tutorial_w
+        tutorial_y = 50
+        
+        # Draw background panel
+        tutorial_rect = pygame.Rect(tutorial_x, tutorial_y, tutorial_w, tutorial_h)
+        pygame.draw.rect(screen, (0, 0, 0, 150), tutorial_rect, border_radius=10)
+        pygame.draw.rect(screen, WHITE, tutorial_rect, 1, border_radius=10)
+
+        # Draw Title
+        title_surf = self.font_small.render("Controls", True, YELLOW)
+        title_rect = title_surf.get_rect(midtop=(tutorial_rect.centerx, tutorial_y + 15))
+        screen.blit(title_surf, title_rect)
+        
+        # Controls list
+        controls = [
+            ("Move Up", "[W]"),
+            ("Move Down", "[S]"),
+            ("Move Left", "[A]"),
+            ("Move Right", "[D]"),
+            ("Restart", "[R]"),
+            ("Auto-Solve", "[Space]"),
+            ("Exit Level", "[Esc]")
+        ]
+        
+        start_y = tutorial_y + 60
+        line_spacing = 32
+        
+        for i, (action, key) in enumerate(controls):
+            # Action text
+            act_surf = self.font_tiny.render(action, True, WHITE)
+            act_rect = act_surf.get_rect(topleft=(tutorial_x + 20, start_y + i * line_spacing))
+            screen.blit(act_surf, act_rect)
+            
+            # Key text
+            key_surf = self.font_tiny.render(key, True, GREEN)
+            key_rect = key_surf.get_rect(topright=(tutorial_x + tutorial_w - 20, start_y + i * line_spacing))
+            screen.blit(key_surf, key_rect)
 
         pygame.display.flip()
 
