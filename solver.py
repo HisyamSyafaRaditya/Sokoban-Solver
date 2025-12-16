@@ -1,5 +1,6 @@
 import time
 from collections import deque
+import heapq
 
 INFINITY = 999999
 
@@ -173,7 +174,7 @@ class SokobanSolver:
         self._push_fringe(0, self.init_player_pos, start_boxes, "", h)
 
         while self.fringe:
-            f, g, player, boxes, path = self.fringe.pop(0)
+            f, g, player, boxes, path = heapq.heappop(self.fringe)
             self.visited_nodes_count += 1
 
             state = (player, boxes)
@@ -198,10 +199,7 @@ class SokobanSolver:
 
         self.expanded_nodes_count += 1
 
-        i = 0
-        while i < len(self.fringe) and self.fringe[i][0] <= f:
-            i += 1
-        self.fringe.insert(i, node)
+        heapq.heappush(self.fringe, node)
 
     def _expand_node(self, g, player, boxes, path):
         px, py = player
