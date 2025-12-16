@@ -2,7 +2,7 @@ import pygame
 import os
 from solver import SokobanSolver, DIRECTIONS, WALL, GOAL
 
-# Modern Color Palette
+# Color Palette
 BLACK = (18, 18, 18)
 WHITE = (240, 240, 240)
 BROWN = (101, 67, 33)
@@ -26,10 +26,8 @@ SCREEN_HEIGHT = 720
 
 
 def draw_gradient_background(screen, top_color, bottom_color):
-    """Draws a vertical gradient background."""
     height = screen.get_height()
     for i in range(height):
-        # Linear interpolation
         alpha = i / height
         r = int(top_color[0] * (1 - alpha) + bottom_color[0] * alpha)
         g = int(top_color[1] * (1 - alpha) + bottom_color[1] * alpha)
@@ -51,18 +49,13 @@ class Button:
         self.is_hovered = False
 
     def draw(self, screen, offset=(0, 0)):
-        # Calculate drawn absolute position
         abs_x = self.rect.x - offset[0]
         abs_y = self.rect.y - offset[1]
-        
-        # Check if button is effectively visible (optional optimization, keeping simple for now)
-        # Mouse interaction check needs to account for offset
+
         mouse_pos = pygame.mouse.get_pos()
-        # Create a transient rect for collision detection at the drawn position
         interact_rect = pygame.Rect(abs_x, abs_y, self.rect.width, self.rect.height)
         
         self.is_hovered = interact_rect.collidepoint(mouse_pos)
-        
         color = self.hover_color if self.is_hovered else self.base_color
         
         # Draw Shadow
@@ -111,9 +104,6 @@ class Button:
 
 
 class SokobanGame:
-    """
-    Sokoban game with manual play mode and auto-solve visualization.
-    """
 
     def __init__(self, solver: SokobanSolver = None, best_score: int = 0):
         self.solver = solver
@@ -127,14 +117,11 @@ class SokobanGame:
 
 
     def _wait_for_input(self):
-        """Waits for a mouse click or SPACE key press."""
         waiting = True
         while waiting:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     waiting = False
-                    # We can't really quit the whole app easily from here without global state or exceptions, 
-                    # but returning will at least exit this wait loop.
                     return 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     waiting = False
@@ -144,14 +131,13 @@ class SokobanGame:
             pygame.time.wait(50)
 
     def _show_victory_screen(self, screen: pygame.Surface, moves_count: int = -1, is_new_record: bool = False, is_auto: bool = False):
-        """Draws the victory overlay."""
-        # Dim background
+        # Victory screen
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180)) # Darker fade
+        overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
         
         # Draw panel
-        panel_w, panel_h = 600, 350 # Slightly taller for extra info
+        panel_w, panel_h = 600, 350
         panel_x = (SCREEN_WIDTH - panel_w) // 2
         panel_y = (SCREEN_HEIGHT - panel_h) // 2
         panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
@@ -195,7 +181,6 @@ class SokobanGame:
         pygame.display.flip()
 
     def _init_ui(self):
-        # Modern styled buttons for in-game
         self.buttons = [
             Button(50, 200, 200, 50, "Restart (R)", "restart", color=(52, 73, 94), hover_color=(41, 128, 185)),
             Button(50, 270, 200, 50, "Auto-Solve", "auto", color=(39, 174, 96), hover_color=(46, 204, 113)), # Green
@@ -278,7 +263,6 @@ class SokobanGame:
         screen.blit(text, (65, 70))
         
         # Draw Best Score
-        # if self.best_score > 0:
         best_text_str = f"Best: {self.best_score}" if self.best_score > 0 else "Best: -"
         text_best = pygame.font.Font(None, 36).render(best_text_str, True, YELLOW)
         screen.blit(text_best, (65, 120))
@@ -534,8 +518,6 @@ class SokobanGame:
                 current_pos = next_pos
                 current_boxes = next_boxes
 
-                # Draw updated state
-                # Draw updated state
                 self._draw_board(screen, current_pos, current_boxes)
                 pygame.time.wait(int(animation_speed * 1000))
                 step_index += 1
@@ -551,9 +533,6 @@ class SokobanGame:
             self._wait_for_input()
 
         print("Animation complete. Returning.")
-        # Do not quit pygame here, as we want to return to menu
-
-
 
 # ============================================================================
 # Level Loading Functions
@@ -582,6 +561,27 @@ def save_best_score(filepath: str, new_score: int):
             f.writelines(lines)
     except Exception as e:
         print(f"Error saving best score: {e}")
+
+def clear_all_best_scores(level_dir: str):
+    if not os.path.exists(level_dir):
+        return
+
+    print(f"Clearing best scores in {level_dir}...")
+    for filename in os.listdir(level_dir):
+        if filename.endswith(".txt"):
+            path = os.path.join(level_dir, filename)
+            try:
+                with open(path, 'r') as f:
+                    lines = f.readlines()
+                
+                new_lines = [line for line in lines if not line.strip().startswith('BEST_SCORE:')]
+                
+                # Only write back if changes were made
+                if len(new_lines) < len(lines):
+                    with open(path, 'w') as f:
+                        f.writelines(new_lines)
+            except Exception as e:
+                print(f"Error clearing score for {filename}: {e}")
 
 def load_all_levels(level_dir: str) -> list[dict]:
     # Load all levels from individual level files in the directory.
@@ -671,8 +671,6 @@ def run_main_menu(levels: list[dict]) -> int:
     cols = 4
     start_x = (SCREEN_WIDTH - (cols * button_width + (cols - 1) * 20)) // 2
     
-    # We'll treat start_y as relative to the top of the SCROLLABLE CONTENT AREA
-    # The Scrollable Area will start at `viewport_y`
     viewport_y = 180 
     viewport_height = SCREEN_HEIGHT - viewport_y - 120 # Leave room for footer
     
@@ -699,22 +697,11 @@ def run_main_menu(levels: list[dict]) -> int:
             
         # Alternate colors for visual interest
         color = (41, 128, 185) if level['best_score'] > 0 else (52, 73, 94) # Blue if completed else Dark Blue
-        
-        # Note: We store the RELATIVE Y position in the rect.
-        # When drawing/checking click, we will subtract scroll_y and add viewport_y.
-        # Actually, simpler: Store absolute Y as if the list was fully expanded starting at 0.
-        # Then offset = scroll_y. viewport_y will be added during Draw call?
-        # Let's keep it simple: The Scrollable Viewport is a window.
-        # Button Rects are defined relative to the Top-Left of the *Content Surface*.
-        # When we draw, we translate: Screen_Y = Viewport_Y + Button_Y - Scroll_Y
-        # So we can just use the Button logic with offset = (0, Scroll_Y - Viewport_Y)
-        
-        # To make it compatible with our Button class which expects screen coordinates mostly, 
-        # let's set the Rect to where it WOULD be if scrolled safely to 0, relative to viewport top.
+
         level_buttons.append(Button(x, y, button_width, button_height, btn_text, i, color=color, hover_color=(52, 152, 219)))
 
     # Add Exit Game button (Fixed position, not in scroll list)
-    exit_btn = Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 90, 200, 60, "Exit Game", -1, color=(192, 57, 43), hover_color=(231, 76, 60))
+    exit_btn = Button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 90, 200, 60, "Back to Home", -2, color=(192, 57, 43), hover_color=(231, 76, 60))
     
     running = True
     title_font = pygame.font.Font(None, 100)
@@ -741,33 +728,20 @@ def run_main_menu(levels: list[dict]) -> int:
         sub_rect = sub_text.get_rect(center=(SCREEN_WIDTH // 2, 140))
         screen.blit(sub_text, sub_rect)
         
-        # --- Draw Scrollable Content ---
-        # Define the viewport Rect
         viewport_rect = pygame.Rect(0, viewport_y, SCREEN_WIDTH, viewport_height)
         
         # Set clipping region
         screen.set_clip(viewport_rect)
-        
-        # Offset for drawing: We need to shift everything UP by scroll_y, and DOWN by viewport_y
-        # Button Y is relative to 0. 
-        # Screen Y = Button Y + viewport_y - scroll_y.
-        # Our Button.draw takes 'offset'. 
-        # abs_y = self.rect.y - offset[1].
-        # We want abs_y = Button Y + viewport_y - scroll_y
-        # So: Button Y - offset[1] = Button Y + viewport_y - scroll_y
-        # offset[1] = scroll_y - viewport_y
         draw_offset = (0, scroll_y - viewport_y)
         
         mouse_pos = pygame.mouse.get_pos()
         
         for btn in level_buttons:
-            # Optimization: Only draw if visible
-            # Button y range: [btn.rect.y, btn.rect.bottom] relative to content top
-            # Visible range in content coords: [scroll_y, scroll_y + viewport_height]
+            # Only draw if visible
             if btn.rect.bottom > scroll_y and btn.rect.y < scroll_y + viewport_height:
                 btn.draw(screen, offset=draw_offset)
         
-        # Draw Scrollbar (optional but helpful)
+        # Draw Scrollbar
         if max_scroll > 0:
             scrollbar_width = 10
             scrollbar_height = int(viewport_height * (viewport_height / content_height))
@@ -781,8 +755,6 @@ def run_main_menu(levels: list[dict]) -> int:
 
         # Unset clip to draw footer
         screen.set_clip(None)
-        
-        # --- Draw Footer (Fixed) ---
         exit_btn.draw(screen)
             
         pygame.display.flip()
@@ -792,7 +764,7 @@ def run_main_menu(levels: list[dict]) -> int:
                 return -1
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    return -1
+                    return -2
             
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_y -= event.y * 30 # Scroll speed
@@ -805,7 +777,6 @@ def run_main_menu(levels: list[dict]) -> int:
                         return exit_btn.action_id
                     
                     # Check Level Buttons
-                    # Must be within viewport to be clickable
                     if viewport_rect.collidepoint(event.pos):
                         for btn in level_buttons:
                             # Use the same offset: scroll_y - viewport_y
@@ -817,72 +788,161 @@ def run_main_menu(levels: list[dict]) -> int:
     return -1
 
 
+def run_welcome_screen() -> str:
+    if not pygame.get_init():
+        pygame.init()
+        
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption('Sokoban Solver - Welcome')
+    clock = pygame.time.Clock()
+    
+    # Create Buttons
+    center_x = SCREEN_WIDTH // 2
+    
+    resume_btn = Button(center_x - 125, 350, 250, 70, "Resume Game", "resume", 
+                        color=(46, 204, 113), hover_color=(39, 174, 96)) # Green
+    
+    restart_btn = Button(center_x - 125, 450, 250, 70, "Restart Game", "restart", 
+                         color=(231, 76, 60), hover_color=(192, 57, 43)) # Red
+                         
+    exit_btn = Button(center_x - 100, 580, 200, 50, "Exit Game", "quit", 
+                      color=(52, 73, 94), hover_color=(44, 62, 80)) # Dark Blue
+
+    buttons = [resume_btn, restart_btn, exit_btn]
+    
+    # Fonts
+    title_font = pygame.font.Font(None, 120)
+    subtitle_font = pygame.font.Font(None, 48)
+    
+    running = True
+    while running:
+        draw_gradient_background(screen, (44, 62, 80), (18, 18, 18))
+        
+        # Draw Title
+        title_text = "SOKOBAN"
+        title_surf = title_font.render(title_text, True, WHITE)
+        title_rect = title_surf.get_rect(center=(center_x, 150))
+        
+        shadow_surf = title_font.render(title_text, True, (0, 0, 0))
+        shadow_rect = shadow_surf.get_rect(center=(center_x + 5, 155))
+        
+        screen.blit(shadow_surf, shadow_rect)
+        screen.blit(title_surf, title_rect)
+        
+        sub_text = subtitle_font.render("Puzzle Solver Adventure", True, (200, 200, 200))
+        sub_rect = sub_text.get_rect(center=(center_x, 220))
+        screen.blit(sub_text, sub_rect)
+        
+        # Draw Buttons
+        for btn in buttons:
+            btn.draw(screen)
+
+        # Warning text for restart
+        if restart_btn.is_hovered:
+            warn_font = pygame.font.Font(None, 30)
+            warn_text = warn_font.render("Warning: This will delete all best scores!", True, (255, 100, 100))
+            warn_rect = warn_text.get_rect(center=(center_x, 540))
+            screen.blit(warn_text, warn_rect)
+            
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return 'quit'
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    for btn in buttons:
+                        if btn.is_clicked(event.pos):
+                            return btn.action_id
+                            
+        clock.tick(30)
+        
+    return 'quit'
+
+
 # ============================================================================
 # Main Program
 # ============================================================================
 
 if __name__ == '__main__':
-    print("Loading levels...")
-    levels = load_all_levels('level')
-    
     while True:
-        # Reload levels to get fresh best scores if updated
-        levels = load_all_levels('level')
+        # Show Welcome Screen first
+        welcome_action = run_welcome_screen()
         
-        choice = run_main_menu(levels)
-        
-        if choice == -1:
+        if welcome_action == 'quit':
             print("Exiting game...")
+            if pygame.get_init():
+                pygame.quit()
             break
             
-        current_level = choice
-        level_data = levels[current_level]
-        board = level_data['board']
-        player_pos = level_data['player']
-        boxes_pos = level_data['boxes']
-        best_score = level_data['best_score']
-        level_path = level_data['file_path']
+        elif welcome_action == 'restart':
+            print("Restarting game. Clearing all history...")
+            clear_all_best_scores('level')
         
-        print(f"\n{'=' * 50}")
-        print(f"Playing Level {current_level + 1}...")
-        print(f"{'=' * 50}")
-        
-        solver = SokobanSolver(board, player_pos, boxes_pos)
-        game = SokobanGame(solver, best_score)
-        
-        # Start with manual play mode
-        print("Starting in MANUAL mode...")
-        result, current_player_pos, current_boxes_pos = game.play_manual(current_level + 1, len(levels), level_path)
-        
-        if result == 'next':
-            print("Level completed! Returning to menu...")
-            pygame.time.wait(1000)
+        # Level Menu Loop
+        while True:
+            # Reload levels to get fresh best scores if updated
+            levels = load_all_levels('level')
             
-        elif result == 'auto':
-            # User requested auto-solve from current state
-            print("\nSwitching to AUTO-SOLVE mode...")
+            choice = run_main_menu(levels)
             
-            # Create new solver with current state
-            auto_solver = SokobanSolver(board, current_player_pos, current_boxes_pos)
-            solution = auto_solver.solve()
+            if choice == -1: # Quit App
+                print("Exiting game...")
+                if pygame.get_init():
+                    pygame.quit()
+                exit()
             
-            if solution:
-                # Display solution statistics
-                print(f"Solution found in {auto_solver.time_used:.3f}s")
-                print(f"Step needed: {len(solution)} step(s)")
+            if choice == -2: # Back to Title
+                break 
                 
-                # Visualize solution from current state
-                auto_game = SokobanGame(auto_solver)
-                auto_game.visualize_solution(solution, animation_speed=0.3)
-                print("Auto-solve complete. Returning to menu...")
-            else:
-                print("No solution found from current position.")
-                pygame.time.wait(2000)
-        
-        # If result is 'quit', it just breaks the inner game loop and returns here,
-        # which loops back to the main menu. Matches "ESC -> Menu" behavior.
+            current_level = choice
+            level_data = levels[current_level]
+            # ... Data Unpacking ...
+            board = level_data['board']
+            player_pos = level_data['player']
+            boxes_pos = level_data['boxes']
+            best_score = level_data['best_score']
+            level_path = level_data['file_path']
+            
+            print(f"\n{'=' * 50}")
+            print(f"Playing Level {current_level + 1}...")
+            print(f"{'=' * 50}")
+            
+            solver = SokobanSolver(board, player_pos, boxes_pos)
+            game = SokobanGame(solver, best_score)
+            
+            # Start with manual play mode
+            print("Starting in MANUAL mode...")
+            result, current_player_pos, current_boxes_pos = game.play_manual(current_level + 1, len(levels), level_path)
+            
+            if result == 'next':
+                print("Level completed! Returning to menu...")
+                pygame.time.wait(1000)
+                
+            elif result == 'auto':
+                # User requested auto-solve from current state
+                print("\nSwitching to AUTO-SOLVE mode...")
+                
+                # Create new solver with current state
+                auto_solver = SokobanSolver(board, current_player_pos, current_boxes_pos)
+                solution = auto_solver.solve()
+                
+                if solution:
+                    # Display solution statistics
+                    print(f"Solution found in {auto_solver.time_used:.3f}s")
+                    print(f"Step needed: {len(solution)} step(s)")
+                    
+                    # Visualize solution from current state
+                    auto_game = SokobanGame(auto_solver)
+                    auto_game.visualize_solution(solution, animation_speed=0.3)
+                    print("Auto-solve complete. Returning to menu...")
+                else:
+                    print("No solution found from current position.")
+                    pygame.time.wait(2000)
+            
+            # Loop continues to Main Menu...
 
-    
     # Cleanup
     if pygame.get_init():
         pygame.quit()
