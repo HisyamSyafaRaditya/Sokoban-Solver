@@ -43,7 +43,7 @@ class Button:
         self.base_color = color
         self.hover_color = hover_color
         self.text_color = text_color
-        self.font = pygame.font.Font(None, 40) # Larger font
+        self.font = pygame.font.Font(None, 40)
         self.small_font = pygame.font.Font(None, 28)
         self.shadow_offset = 4
         self.is_hovered = False
