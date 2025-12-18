@@ -180,6 +180,42 @@ class SokobanGame:
 
         pygame.display.flip()
 
+    def _show_no_solution_screen(self, screen: pygame.Surface):
+        # No Solution screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        screen.blit(overlay, (0, 0))
+        
+        # Draw panel
+        panel_w, panel_h = 600, 250
+        panel_x = (SCREEN_WIDTH - panel_w) // 2
+        panel_y = (SCREEN_HEIGHT - panel_h) // 2
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        
+        pygame.draw.rect(screen, (34, 49, 63), panel_rect, border_radius=20)
+        pygame.draw.rect(screen, (231, 76, 60), panel_rect, 3, border_radius=20) # Red Border
+        
+        # Calculate centers
+        center_x = SCREEN_WIDTH // 2
+        center_y = SCREEN_HEIGHT // 2
+
+        current_y_offset = -50
+
+        # Title Text
+        title_text = "NO SOLUTION FOUND"
+        title_surf = self.font_medium.render(title_text, True, (231, 76, 60)) # Red
+        title_rect = title_surf.get_rect(center=(center_x, center_y + current_y_offset))
+        screen.blit(title_surf, title_rect)
+        
+        current_y_offset += 80
+
+        # Continue Text
+        cont_text = self.font_small.render("Press SPACE or CLICK to Continue", True, WHITE)
+        cont_rect = cont_text.get_rect(center=(center_x, center_y + current_y_offset))
+        screen.blit(cont_text, cont_rect)
+
+        pygame.display.flip()
+
     def _init_ui(self):
         self.buttons = [
             Button(50, 200, 200, 50, "Restart (R)", "restart", color=(52, 73, 94), hover_color=(41, 128, 185)),
@@ -979,11 +1015,25 @@ if __name__ == '__main__':
                     
                     # Visualize solution from current state
                     auto_game = SokobanGame(auto_solver)
-                    auto_game.visualize_solution(solution, animation_speed=0.3)
+                    auto_game.visualize_solution(solution, animation_speed=0.2)
                     print("Auto-solve complete. Returning to menu...")
                 else:
                     print("No solution found from current position.")
-                    pygame.time.wait(2000)
+                    
+                    # Show no solution screen
+                    if pygame.get_init():
+                         # Ensure we have a screen to draw on
+                        screen = pygame.display.get_surface()
+                        if not screen:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+                        # Re-draw the board so the overlay sits on top of the current state
+                        auto_game = SokobanGame(auto_solver)
+                        auto_game.assets = game.assets # Share assets to avoid reloading
+                        auto_game._draw_board(screen, current_player_pos, current_boxes_pos)
+                        
+                        auto_game._show_no_solution_screen(screen)
+                        auto_game._wait_for_input()
             
             # Loop continues to Main Menu...
 
